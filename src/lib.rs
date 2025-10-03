@@ -6,6 +6,21 @@ use std::path::Path;
 use std::ffi::OsStr;
 use serde::Deserialize;
 
+pub type SarusResult<T> = std::result::Result<T, SarusError>;
+
+#[derive(Debug, Clone)]
+pub struct SarusError {
+    code: u64,
+    msg: String,
+}
+
+impl std::fmt::Display for SarusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Error {:03}: {}", self.code, self.msg)
+    }
+}
+
+impl Error for SarusError {}
 
 #[derive(Deserialize)]
 pub struct EDF {
@@ -92,7 +107,7 @@ pub fn edf_load2(file_path: &str) -> Result<EDF, Box<dyn Error>> {
     Ok(edf)
 }
 
-pub fn validate(path: String) -> bool {
+pub fn validate(path: String) -> SarusResult<()> {
 
     let path_str = path.as_str();
 
@@ -124,8 +139,13 @@ pub fn validate(path: String) -> bool {
     let schema: serde_json::Value = match serde_json::from_str(&schema_content) {
         Ok(c) => c,
         Err(_) => {
-            eprintln!("Failed to parse schema file");
-            return false;
+            return Err(
+                SarusError {
+                    code: 0,
+                    msg: String::from("Failed to parse schema file"),
+                });
+            //eprintln!("Failed to parse schema file");
+            //return false;
         }
     };
 
@@ -133,46 +153,70 @@ pub fn validate(path: String) -> bool {
     let validator = match jsonschema::options().build(&schema) {
         Ok(v) => v,
         Err(error) => {
-            eprintln!("Schema is invalid. Error: {error}");
-            return false;
+            return Err(
+                SarusError {
+                    code: 1,
+                    msg: String::from(format!("Schema is invalid.\n{error}")),
+                });
+            //eprintln!("Schema is invalid. Error: {error}");
+            //return false;
         }
     };
     
     let toml_content = match load(path_str) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("{}", e);
-            return false;
+            return Err(
+                SarusError {
+                    code: 2,
+                    msg: String::from(format!("{}", e)),
+                });
+            //eprintln!("{}", e);
+            //return false;
         },
     };
 
     let toml_value = match toml::from_str(&toml_content) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("{}", e);
-            return false;
+            return Err(
+                SarusError {
+                    code: 3,
+                    msg: String::from(format!("{}", e)),
+                });
+            //eprintln!("{}", e);
+            //return false;
         },
     };
 
     let mut has_errors = false;
     let mut errors = validator.iter_errors(&toml_value);
+    let mut emsg = String::from("");
 
     if let Some(first) = errors.next() {
         has_errors = true;
-        println!("{path_str} is an INVALID EDF file.");
-        eprintln!("\nErrors:");
-        eprintln!("1. {first}");
+        //println!("{path_str} is an INVALID EDF file.");
+        emsg = format!("Errors:\n1. {first}");
+        //eprintln!("\nErrors:");
+        //eprintln!("1. {first}");
         for (i, error) in errors.enumerate() {
-            eprintln!("{}. {error}", i + 2);
+            emsg = String::from(format!("{emsg}\n{}. {}", (i + 2), error));
+            //eprintln!("{}. {error}", i + 2);
         }
     } else {
-        println!("{path_str} is a valid EDF file");
+        //println!("{path_str} is a valid EDF file");
     }
 
     if has_errors {
-        return false;
+        return Err(
+            SarusError {
+                code: 4,
+                msg: String::from(format!("{}", emsg)),
+            });
+        //return false;
     } else {
-        return true;
+        return Ok(());
+        //return true;
     }
 }
 
