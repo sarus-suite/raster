@@ -1,0 +1,9 @@
+base_environment = ['foo','bar']
+#image = 'bar'
+
+mounts = ["pippo:pluto:mare","pizza:fantasia"]
+
+[annotations]
+pizza = 'fichi'
+roba = 'pazzi'
+

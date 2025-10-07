@@ -1,14 +1,13 @@
-use toml::Table;
-use toml::Value;
-use toml::map::Map;
 use std::error::Error;
 use std::path::Path;
 use std::ffi::OsStr;
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+use derivative::Derivative;
 
 pub type SarusResult<T> = std::result::Result<T, SarusError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SarusError {
     code: u64,
     msg: String,
@@ -22,19 +21,63 @@ impl std::fmt::Display for SarusError {
 
 impl Error for SarusError {}
 
-#[derive(Deserialize)]
+#[allow(dead_code)]
+#[derive(Derivative, Serialize, Deserialize)]
 pub struct EDF {
-   _base_environment: Option<BaseEnvironment>,
-   _image: Option<String>,
+   #[serde(default = "get_default_annotations")]
+   annotations: HashMap<String,String>,
+   base_environment: Option<BaseEnvironment>,
+   #[serde(default = "get_default_devices")]
+   devices: Vec<String>,
+   #[serde(default = "get_default_entrypoint")]
+   entrypoint: bool,
+   #[serde(default = "get_default_env")]
+   env: HashMap<String,String>,
+   image: Option<String>,
+   #[serde(default = "get_default_mounts")]
+   mounts: Vec<String>,
+   #[serde(default = "get_default_workdir")]
+   workdir: String,
+   #[serde(default = "get_default_writable")]
+   writable: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum BaseEnvironment {
     TypeString(String),
     TypeVec(Vec<String>),
 }
 
-pub fn load(file_path: &str) -> Result<String, Box<dyn Error>> {
+fn get_default_annotations() -> HashMap<String,String> {
+    return HashMap::from([]);
+}
+
+fn get_default_devices() -> Vec<String> {
+    return vec![];
+}
+
+fn get_default_entrypoint() -> bool {
+    return false;
+}
+
+fn get_default_env() -> HashMap<String,String> {
+    return HashMap::from([]);
+}
+
+fn get_default_writable() -> bool {
+    return true;
+}
+
+fn get_default_mounts() -> Vec<String> {
+    return vec![];
+}
+
+fn get_default_workdir() -> String {
+    return String::from("");
+}
+
+fn load(file_path: &str) -> Result<String, Box<dyn Error>> {
 
   // SD-67022 - prevent reading wrong file
   let fp = Path::new(file_path);
@@ -59,52 +102,7 @@ pub fn load(file_path: &str) -> Result<String, Box<dyn Error>> {
 
   let outstr = std::fs::read_to_string(file_path)?;
 
-  //println!("This is its content:\n\n{outstr}\n");
-
   Ok(outstr)
-}
-
-pub fn toml_parse(content: &str) -> Result<Map<String, Value>, Box<dyn Error>> {
-
-    let table = content.parse::<Table>()?;
-    Ok(table)
-}
-
-pub fn edf_parse(toml: Map<String, Value>) -> Result<Map<String, Value>, Box<dyn Error>> {
-    let _allowed_fields = vec![
-                              "annotations",
-                              "base_environment",
-                              "entrypoint",
-                              "env",
-                              "image",
-                              "mounts",
-                              "workdir",
-                              "writable"
-                              ];
-    Ok(toml)
-}
-
-
-pub fn edf_parse2(input: &str) -> Result<EDF, Box<dyn Error>> {
-    let edf: EDF = toml::from_str(input)?;
-    //println!("base_environment: {}", edf.base_environment.ok_or("NULL")?);
-    //println!("image: {}", edf.image.ok_or("NULL")?);
-    Ok(edf)
-}
-
-pub fn edf_load(file_path: &str) -> Result<Map<String, Value>, Box<dyn Error>> {
-
-    let _content = load(file_path)?;
-    let _toml_table = toml_parse(&_content)?;
-    let edf_map = edf_parse(_toml_table)?; 
-    Ok(edf_map)
-}
-
-pub fn edf_load2(file_path: &str) -> Result<EDF, Box<dyn Error>> {
-
-    let _content = load(file_path)?;
-    let edf = edf_parse2(&_content)?; 
-    Ok(edf)
 }
 
 pub fn validate(path: String) -> SarusResult<()> {
@@ -114,28 +112,6 @@ pub fn validate(path: String) -> SarusResult<()> {
     // Embedding schema file
     let schema_content = include_str!("schema/edf.json");
 
-    // From: https://docs.rs/crate/jsonschema-for-toml/0.1.0/source/src/main.rs
-    // Embedded schema not needed at runtime
-    /*
-    let schema_path_str = "./src/schema/edf.json";
-
-    let schema_content = match std::fs::read_to_string(&schema_path_str) {
-        Ok(c) => c,
-        Err(_) => {
-            eprintln!("Failed to read schema file: {}", schema_path_str);
-            return false;
-        }
-    };
-
-    let schema: serde_json::Value = match serde_json::from_str(&schema_content) {
-        Ok(c) => c,
-        Err(_) => {
-            eprintln!("Failed to parse schema file: {}", schema_path_str);
-            return false;
-        }
-    };
-    */
-
     let schema: serde_json::Value = match serde_json::from_str(&schema_content) {
         Ok(c) => c,
         Err(_) => {
@@ -144,12 +120,9 @@ pub fn validate(path: String) -> SarusResult<()> {
                     code: 0,
                     msg: String::from("Failed to parse schema file"),
                 });
-            //eprintln!("Failed to parse schema file");
-            //return false;
         }
     };
 
-    // Create validator
     let validator = match jsonschema::options().build(&schema) {
         Ok(v) => v,
         Err(error) => {
@@ -158,8 +131,6 @@ pub fn validate(path: String) -> SarusResult<()> {
                     code: 1,
                     msg: String::from(format!("Schema is invalid.\n{error}")),
                 });
-            //eprintln!("Schema is invalid. Error: {error}");
-            //return false;
         }
     };
     
@@ -171,8 +142,6 @@ pub fn validate(path: String) -> SarusResult<()> {
                     code: 2,
                     msg: String::from(format!("{}", e)),
                 });
-            //eprintln!("{}", e);
-            //return false;
         },
     };
 
@@ -184,8 +153,6 @@ pub fn validate(path: String) -> SarusResult<()> {
                     code: 3,
                     msg: String::from(format!("{}", e)),
                 });
-            //eprintln!("{}", e);
-            //return false;
         },
     };
 
@@ -195,16 +162,10 @@ pub fn validate(path: String) -> SarusResult<()> {
 
     if let Some(first) = errors.next() {
         has_errors = true;
-        //println!("{path_str} is an INVALID EDF file.");
         emsg = format!("Errors:\n1. {first}");
-        //eprintln!("\nErrors:");
-        //eprintln!("1. {first}");
         for (i, error) in errors.enumerate() {
             emsg = String::from(format!("{emsg}\n{}. {}", (i + 2), error));
-            //eprintln!("{}. {error}", i + 2);
         }
-    } else {
-        //println!("{path_str} is a valid EDF file");
     }
 
     if has_errors {
@@ -213,11 +174,44 @@ pub fn validate(path: String) -> SarusResult<()> {
                 code: 4,
                 msg: String::from(format!("{}", emsg)),
             });
-        //return false;
     } else {
         return Ok(());
-        //return true;
     }
+}
+
+pub fn render(path: String) -> SarusResult<EDF> {
+
+    validate(path.clone())?;
+
+    let path_str = path.as_str();
+    
+    let toml_content = match load(path_str) {
+        Ok(c) => c,
+        Err(e) => {
+            return Err(
+                SarusError {
+                    code: 2,
+                    msg: String::from(format!("{}", e)),
+                });
+        },
+    };
+
+    
+    let toml_value = match toml::from_str(toml_content.as_str()) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(
+                SarusError {
+                    code: 3,
+                    msg: String::from(format!("{}", e)),
+                });
+        },
+    };
+
+    let e: EDF = toml_value;
+
+    Ok(e)
+    
 }
 
 #[cfg(test)]
@@ -226,26 +220,28 @@ mod tests {
 
     #[test]
     fn good_toml() {
-        let table = edf_load("src/toml/test.toml").unwrap();
-        let value = table["foo"].as_str().unwrap();
-        let expected = "bar";
-        assert_eq!(value,expected);
-        /*
-        let result = edf_load2("src/toml/test.toml");
-        println!("{}",result.is_err());
-        assert!(result.is_err());
-        */
+        // Loop through all toml files containing "good" in their name
+        let good_filepaths = std::fs::read_dir("src/toml").unwrap();
+        for fr in good_filepaths {
+            let fpath = fr.unwrap().path();
+            let fname = fpath.file_name().unwrap().to_os_string().into_string().unwrap();
+            if fname.contains("good") {
+                let fstr = fpath.into_os_string().into_string().unwrap();
+                let r = render(fstr);
+                assert!(r.is_ok());
+            }
+        }
     }
 
     #[test]
     fn file_not_found() {
-        let result = edf_load("src/toml/not_found.toml");
+        let result = render(String::from("src/toml/not_found.toml"));
         assert!(result.is_err());
     }
 
     #[test]
     fn not_a_toml_file() {
-        let result = edf_load("src/toml/test.txt");
+        let result = render(String::from("src/toml/test.txt"));
         assert!(result.is_err());
     }
 }

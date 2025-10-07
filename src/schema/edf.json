@@ -13,11 +13,17 @@
     },
     "base_environment": {
       "description": "Ordered list of EDFs that this file inherits from. Parameters from listed environments are evaluated sequentially. Supports up to 10 levels of recursion.",
-      "type": ["array", "string"]
+      "type": ["string", "array"]
+    },
+    "devices": {
+      "description": "List of devices.",
+      "type": "array",
+      "default": []
     },
     "entrypoint": {
       "description": "If true, run the entrypoint from the container image.",
-      "type": "boolean"
+      "type": "boolean",
+      "default": false
     },
     "env": {
       "description": "Environment variables to set in the container.",
@@ -30,7 +36,12 @@
     },
     "mounts": {
       "description": "List of mounts in the format SOURCE:DESTINATION[:FLAGS].",
-      "type": "array"
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "pattern": "^[^:]+:[^:]+(:[^:]+)?$"
+      }
     },
     "workdir": {
       "description": "Initial working directory when the container starts.",
@@ -38,11 +49,12 @@
     },
     "writable": {
       "description": "If false, the container filesystem is read-only.",
-      "type": "boolean"
+      "type": "boolean",
+      "default": true
     }
   },
   "anyOf": [
-   { "required": ["base_environemnt"] },
+   { "required": ["base_environment"] },
    { "required": ["image"] }
   ]
 }
