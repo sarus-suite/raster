@@ -1,5 +1,5 @@
+use serde::Deserialize;
 use std::error::Error;
-use serde::{Deserialize};
 
 pub type SarusResult<T> = std::result::Result<T, SarusError>;
 
