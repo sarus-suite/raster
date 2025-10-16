@@ -6,7 +6,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::path::Path;
 
-use crate::common::{expand_vars_hashmap, expand_vars_vec};
+use crate::common::{expand_vars_hashmap, expand_vars_string, expand_vars_vec};
 use crate::config::load_config;
 use crate::error::{SarusError, SarusResult};
 use crate::mount::{SarusMounts, sarus_mounts_from_strings};
@@ -43,36 +43,36 @@ pub struct RawEDF {
 #[derive(Derivative, Serialize, Deserialize, Clone)]
 pub struct EDF {
     #[serde(default = "get_default_annotations")]
-    annotations: HashMap<String, String>,
+    pub annotations: HashMap<String, String>,
     #[serde(default = "get_default_devices")]
-    devices: Vec<String>,
+    pub devices: Vec<String>,
     #[serde(default = "get_default_entrypoint")]
-    entrypoint: bool,
+    pub entrypoint: bool,
     #[serde(default = "get_default_env")]
-    env: HashMap<String, String>,
-    image: String,
+    pub env: HashMap<String, String>,
+    pub image: String,
     #[serde(default = "get_default_mounts")]
-    mounts: SarusMounts,
+    pub mounts: SarusMounts,
     #[serde(default = "get_default_parallax_enable")]
-    parallax_enable: bool,
+    pub parallax_enable: bool,
     #[serde(default = "get_default_parallax_imagestore")]
-    parallax_imagestore: String,
+    pub parallax_imagestore: String,
     #[serde(default = "get_default_parallax_mount_program")]
-    parallax_mount_program: String,
+    pub parallax_mount_program: String,
     #[serde(default = "get_default_parallax_path")]
-    parallax_path: String,
+    pub parallax_path: String,
     #[serde(default = "get_default_perfmon")]
-    perfmon: bool,
+    pub perfmon: bool,
     #[serde(default = "get_default_podman_module")]
-    podman_module: String,
+    pub podman_module: String,
     #[serde(default = "get_default_podman_path")]
-    podman_path: String,
+    pub podman_path: String,
     #[serde(default = "get_default_podman_tmp_path")]
-    podman_tmp_path: String,
+    pub podman_tmp_path: String,
     #[serde(default = "get_default_workdir")]
-    workdir: String,
+    pub workdir: String,
     #[serde(default = "get_default_writable")]
-    writable: bool,
+    pub writable: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -355,10 +355,12 @@ fn resolve_env_path(env: String, sp: &Vec<String>) -> SarusResult<String> {
     let mut retopt = None;
     let mut file_path;
 
+    let ee = expand_vars_string(env)?;
+
     // it doesn't look like a file_path
-    if ![".", "/"].iter().any(|s| env.starts_with(*s)) && !env.ends_with(".toml") {
+    if ![".", "/"].iter().any(|s| ee.starts_with(*s)) && !ee.ends_with(".toml") {
         for s in sp.iter() {
-            file_path = format!("{s}/{env}.toml");
+            file_path = format!("{s}/{ee}.toml");
             if std::path::Path::new(&file_path).is_file() {
                 match std::fs::File::open(&file_path) {
                     Ok(_) => {
@@ -370,7 +372,7 @@ fn resolve_env_path(env: String, sp: &Vec<String>) -> SarusResult<String> {
             }
         }
     } else {
-        file_path = env.clone();
+        file_path = ee.clone();
         if std::path::Path::new(&file_path).is_file() {
             match std::fs::File::open(&file_path) {
                 Ok(_) => {
@@ -392,7 +394,7 @@ fn resolve_env_path(env: String, sp: &Vec<String>) -> SarusResult<String> {
             return Err(SarusError {
                 code: 6,
                 file_path: None,
-                msg: String::from(format!("environment \"{env}\" not found at {paths}")),
+                msg: String::from(format!("environment \"{ee}\" not found at {paths}")),
             });
         }
     }
@@ -620,6 +622,30 @@ fn render_inner_loop(
     }
     if e.annotations.is_some() {
         e.annotations = Some(expand_vars_hashmap(e.annotations.unwrap())?);
+    }
+    if e.engine.is_some() {
+        e.engine = Some(expand_vars_string(e.engine.unwrap())?);
+    }
+    if e.parallax_imagestore.is_some() {
+        e.parallax_imagestore = Some(expand_vars_string(e.parallax_imagestore.unwrap())?);
+    }
+    if e.parallax_path.is_some() {
+        e.parallax_path = Some(expand_vars_string(e.parallax_path.unwrap())?);
+    }
+    if e.parallax_mount_program.is_some() {
+        e.parallax_mount_program = Some(expand_vars_string(e.parallax_mount_program.unwrap())?);
+    }
+    if e.podman_module.is_some() {
+        e.podman_module = Some(expand_vars_string(e.podman_module.unwrap())?);
+    }
+    if e.podman_path.is_some() {
+        e.podman_path = Some(expand_vars_string(e.podman_path.unwrap())?);
+    }
+    if e.podman_tmp_path.is_some() {
+        e.podman_tmp_path = Some(expand_vars_string(e.podman_tmp_path.unwrap())?);
+    }
+    if e.workdir.is_some() {
+        e.workdir = Some(expand_vars_string(e.workdir.unwrap())?);
     }
 
     return Ok(e);

@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
 use crate::common::expand_vars_string;
 use crate::error::{SarusError, SarusResult};
-use serde::{Deserialize, Serialize};
 
 pub type SarusMounts = Vec<SarusMount>;
 
@@ -140,11 +142,18 @@ impl SarusMount {
             } else {
                 flags = format!("{df}");
             }
+            let ex = expand_vars_string(flags)?;
+
+            // Remove duplicate flags
+            let parts: Vec<_> = ex.split(',').collect();
+            let parts_set: HashSet<_> = parts.into_iter().collect();
+            let parts_unique_vec: Vec<_> = parts_set.into_iter().collect();
+            let ef = parts_unique_vec.join(",");
 
             em = SarusMount {
                 source: String::from(es),
                 target: String::from(et),
-                flags: String::from(flags),
+                flags: String::from(ef),
             }
         }
 
