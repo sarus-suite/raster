@@ -6,10 +6,12 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::path::Path;
 
+use crate::common::{expand_vars_hashmap, expand_vars_vec};
 use crate::config::load_config;
 use crate::error::{SarusError, SarusResult};
 use crate::mount::{SarusMounts, sarus_mounts_from_strings};
 
+pub mod common;
 pub mod config;
 pub mod error;
 pub mod mount;
@@ -289,7 +291,7 @@ pub fn validate(path: String) -> SarusResult<()> {
         Ok(v) => v,
         Err(e) => {
             return Err(SarusError {
-                code: 3,
+                code: 15,
                 file_path: Some(String::from(path_str)),
                 msg: String::from(format!("{}", e)),
             });
@@ -395,6 +397,37 @@ fn resolve_env_path(env: String, sp: &Vec<String>) -> SarusResult<String> {
         }
     }
 }
+/*
+fn expand_vars_string(s: String) -> SarusResult<String> {
+    match shellexpand::env(&s) {
+        Ok(ok) => return Ok(ok.to_string()),
+        Err(e) => return Err(SarusError {
+            code: 16,
+            file_path: None,
+            msg: String::from(format!("cannot expand variable {}, {}", e.var_name, e.cause)),
+        }),
+    };
+}
+
+fn expand_vars_hashmap(h: HashMap<String, String>) -> SarusResult<HashMap<String, String>> {
+    let mut newh = h.clone();
+    for (k,v) in h {
+        let ev = expand_vars_string(v.clone())?;
+        if ev != v {
+            newh.insert(k,ev);
+        }
+    }
+    return Ok(newh);
+}
+
+fn expand_vars_vec(v: Vec<String>) -> SarusResult<Vec<String>> {
+    let mut newv = vec![];
+    for s in v {
+        newv.push(expand_vars_string(s)?);
+    }
+    return Ok(newv);
+}
+*/
 
 fn render_inner_loop(
     name: String,
@@ -572,12 +605,21 @@ fn render_inner_loop(
         }
     }
 
-    //Remove duplicates from devices
     if e.devices.is_some() {
-        let dev = e.devices.unwrap();
+        // Expand variables
+        e.devices = Some(expand_vars_vec(e.devices.unwrap())?);
+
+        //Remove duplicates from devices
+        let dev = e.devices.clone().unwrap();
         let dev_set: HashSet<_> = dev.into_iter().collect();
         let dev_unique_vec: Vec<_> = dev_set.into_iter().collect();
         e.devices = Some(dev_unique_vec);
+    }
+    if e.env.is_some() {
+        e.env = Some(expand_vars_hashmap(e.env.unwrap())?);
+    }
+    if e.annotations.is_some() {
+        e.annotations = Some(expand_vars_hashmap(e.annotations.unwrap())?);
     }
 
     return Ok(e);
