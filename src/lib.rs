@@ -131,7 +131,7 @@ fn get_default_devices() -> Vec<String> {
 }
 
 fn get_default_entrypoint() -> bool {
-    return false;
+    return true;
 }
 
 fn get_default_env() -> HashMap<String, String> {
