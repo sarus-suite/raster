@@ -7,7 +7,7 @@ pub fn expand_vars_string(s: String) -> SarusResult<String> {
         Ok(ok) => return Ok(ok.to_string()),
         Err(e) => {
             return Err(SarusError {
-                code: 16,
+                code: 17,
                 file_path: None,
                 msg: String::from(format!(
                     "cannot expand variable {}, {}",
