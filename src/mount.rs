@@ -166,6 +166,14 @@ impl SarusMount {
 
         return Ok(em);
     }
+
+    pub fn to_volume_string(&self) -> String {
+        if self.flags.is_empty() {
+            format!("{}:{}", self.source, self.target)
+        } else {
+            format!("{}:{}:{}", self.source, self.target, self.flags)
+        }
+    }
 }
 
 pub fn sarus_mounts_from_strings(input: Vec<String>) -> SarusResult<SarusMounts> {
