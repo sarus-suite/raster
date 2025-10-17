@@ -8,8 +8,7 @@
   "properties": {
     "annotations": {
       "description": "OCI-like annotations for the container.",
-      "type": "object",
-      "additionalProperties": { "type": "string" }
+      "type": "object"
     },
     "base_environment": {
       "description": "Ordered list of EDFs that this file inherits from. Parameters from listed environments are evaluated sequentially. Supports up to 10 levels of recursion.",

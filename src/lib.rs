@@ -5,6 +5,8 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::path::Path;
+use toml::Value;
+use toml::map::Map;
 
 use crate::common::{expand_vars_hashmap, expand_vars_string, expand_vars_vec};
 use crate::config::load_config;
@@ -19,7 +21,7 @@ pub mod mount;
 #[allow(dead_code)]
 #[derive(Derivative, Serialize, Deserialize, Clone)]
 pub struct RawEDF {
-    annotations: Option<HashMap<String, String>>,
+    annotations: Option<Annotations>,
     base_environment: Option<BaseEnvironment>,
     devices: Option<Vec<String>>,
     entrypoint: Option<bool>,
@@ -80,6 +82,44 @@ pub struct EDF {
 pub enum BaseEnvironment {
     TypeString(String),
     TypeVec(Vec<String>),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum Annotations {
+    TypeMap(Map<String, Value>),
+    TypeHashMap(HashMap<String, String>),
+}
+
+fn annotations_as_hashmap(a: Annotations) -> HashMap<String, String> {
+    let r = match a {
+        Annotations::TypeHashMap(h) => h,
+        Annotations::TypeMap(m) => map2hashmap(m),
+    };
+    r
+}
+
+fn map2hashmap(m: Map<String, Value>) -> HashMap<String, String> {
+    let mut r = HashMap::from([]);
+    for i in m.iter() {
+        let (k, v) = i;
+        if v.is_table() {
+            let t = v.as_table().unwrap();
+            let h = map2hashmap(t.clone());
+            for j in h.iter() {
+                let (jk, jv) = j;
+                let new_k = format!("{k}.{jk}");
+                r.insert(new_k, jv.clone());
+            }
+        } else {
+            if v.is_str() {
+                r.insert(k.to_string(), v.as_str().unwrap().to_string());
+            } else {
+                r.insert(k.to_string(), v.to_string());
+            }
+        }
+    }
+    r
 }
 
 fn get_default_annotations() -> HashMap<String, String> {
@@ -148,7 +188,7 @@ impl TryFrom<RawEDF> for EDF {
     fn try_from(r: RawEDF) -> SarusResult<Self> {
         Ok(EDF {
             annotations: match r.annotations {
-                Some(s) => s,
+                Some(s) => annotations_as_hashmap(s),
                 None => get_default_annotations(),
             },
             devices: match r.devices {
@@ -498,13 +538,18 @@ fn render_inner_loop(
         let i = ei.unwrap();
 
         match i.annotations {
-            Some(mut a) => match e.annotations {
-                Some(ref mut b) => {
-                    a.extend(b.clone());
-                    e.annotations = Some(a);
+            Some(a) => match e.annotations {
+                Some(b) => {
+                    let mut a1 = annotations_as_hashmap(a);
+                    let b1 = annotations_as_hashmap(b);
+                    a1.extend(b1.clone());
+                    a1 = expand_vars_hashmap(a1)?;
+                    e.annotations = Some(Annotations::TypeHashMap(a1));
                 }
                 None => {
-                    e.annotations = Some(a);
+                    let mut a1 = annotations_as_hashmap(a);
+                    a1 = expand_vars_hashmap(a1)?;
+                    e.annotations = Some(Annotations::TypeHashMap(a1));
                 }
             },
             None => (),
@@ -621,7 +666,10 @@ fn render_inner_loop(
         e.env = Some(expand_vars_hashmap(e.env.unwrap())?);
     }
     if e.annotations.is_some() {
-        e.annotations = Some(expand_vars_hashmap(e.annotations.unwrap())?);
+        let a = e.annotations.unwrap();
+        let mut h = annotations_as_hashmap(a);
+        h = expand_vars_hashmap(h)?;
+        e.annotations = Some(Annotations::TypeHashMap(h));
     }
     if e.engine.is_some() {
         e.engine = Some(expand_vars_string(e.engine.unwrap())?);
