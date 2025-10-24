@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+const CONFIG_FILE: &str = "/etc/sarus/edf.conf";
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RawConfig {
     edf_system_search_path: Option<String>,
@@ -52,7 +54,7 @@ fn load_raw_config(filepath: String) -> RawConfig {
 }
 
 pub fn load_config() -> Config {
-    let config_file_path = String::from("/etc/sarus/edf.conf");
+    let config_file_path = String::from(CONFIG_FILE);
     let r = load_raw_config(config_file_path);
     let c = Config::from(r);
     c
