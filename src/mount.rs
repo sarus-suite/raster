@@ -138,6 +138,13 @@ impl SarusMount {
         } else {
             let flags;
             if f != "" {
+                /*
+                 * enroot uses "," as the separator for mount flags,
+                 * but we already use this character for separating mount entries,
+                 * so we use "+" for mount flags and convert to "," here.
+                 *
+                 */
+                let f = str::replace(f, "+", ",");
                 flags = format!("{df},{f}");
             } else {
                 flags = format!("{df}");
