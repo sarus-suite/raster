@@ -696,7 +696,7 @@ mod tests {
                 .unwrap();
             if fname.contains("good") {
                 let fstr = fpath.into_os_string().into_string().unwrap();
-                let r = render(fstr, String::from("/etc/edf"));
+                let r = render(fstr);
                 assert!(r.is_ok());
             }
         }
@@ -705,15 +705,14 @@ mod tests {
     #[test]
     fn file_not_found() {
         let result = render(
-            String::from("src/toml/not_found.toml"),
-            String::from("/etc/edf"),
+            String::from("src/toml/not_found.toml")
         );
         assert!(result.is_err());
     }
 
     #[test]
     fn not_a_toml_file() {
-        let result = render(String::from("src/toml/test.txt"), String::from("/etc/edf"));
+        let result = render(String::from("src/toml/test.txt"));
         assert!(result.is_err());
     }
 }
