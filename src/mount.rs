@@ -35,7 +35,6 @@ impl SarusMount {
         if asize == 3 {
             f = a.next().unwrap();
         }
-        let mut df = "";
 
         let mut ps: std::path::PathBuf = std::path::Path::new(s).into();
         let pt: std::path::PathBuf = std::path::Path::new(t).into();
@@ -75,22 +74,15 @@ impl SarusMount {
                 }
             };
         } else {
-            if [".", "/"].iter().any(|s| ps.starts_with(*s)) {
-                df = "x-create=auto,rbind";
-            } else {
-                if s == "tmpfs" {
-                    df = "x-create=dir";
-                } else if s == "umount" {
-                    df = "x-detach";
-                } else {
-                    return Err(SarusError {
-                        code: 12,
-                        file_path: None,
-                        msg: format!(
-                            "mount source {ps:#?} must be one among a relative path starting with . , an absolute path starting with / , \"tmpfs\" or \"umount\""
-                        ),
-                    });
-                }
+            // TODO consider if we should just accept absolute paths
+            if ![".", "/"].iter().any(|s| ps.starts_with(*s)) {
+                return Err(SarusError {
+                    code: 12,
+                    file_path: None,
+                    msg: format!(
+                        "mount source {ps:#?} must be one among a relative path starting with . , an absolute path starting with / , \"tmpfs\" or \"umount\""
+                    ),
+                });
             }
         }
 
@@ -136,18 +128,11 @@ impl SarusMount {
                 flags: String::from(""),
             }
         } else {
-            let flags;
+            let flags: String;
             if f != "" {
-                /*
-                 * enroot uses "," as the separator for mount flags,
-                 * but we already use this character for separating mount entries,
-                 * so we use "+" for mount flags and convert to "," here.
-                 *
-                 */
-                let f = str::replace(f, "+", ",");
-                flags = format!("{df},{f}");
+                flags = String::from(f);
             } else {
-                flags = format!("{df}");
+                flags = String::new();
             }
             let ex = expand_vars_string(flags)?;
 
