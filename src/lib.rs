@@ -361,7 +361,34 @@ pub fn validate(path: String) -> SarusResult<()> {
     }
 }
 
-fn get_search_paths(sys_search_path: String) -> Vec<String> {
+pub fn get_search_paths() -> Vec<String> {
+    let mut search_paths = vec![];
+
+    let user_sp = get_user_search_paths();
+    search_paths.extend(user_sp);
+
+    let sys_sp = get_sys_search_paths();
+    search_paths.extend(sys_sp);
+
+    search_paths
+}
+
+pub fn get_sys_search_paths() -> Vec<String> {
+    let mut search_paths = vec![];
+    let config = load_config();
+    let sys_search_path = config.edf_system_search_path;
+
+    if sys_search_path != "" {
+        let paths = sys_search_path.split(":");
+        for p in paths {
+            search_paths.push(String::from(p));
+        }
+    }
+
+    search_paths
+}
+
+pub fn get_user_search_paths() -> Vec<String> {
     let mut search_paths = vec![];
 
     // $EDF_PATH or $HOME/.edf or ""
@@ -381,11 +408,6 @@ fn get_search_paths(sys_search_path: String) -> Vec<String> {
     };
     if edf_path != "" {
         search_paths.push(edf_path);
-    }
-
-    // add sys_search_path
-    if sys_search_path != "" {
-        search_paths.push(sys_search_path);
     }
 
     search_paths
@@ -668,14 +690,18 @@ fn render_inner_loop(
     return Ok(e);
 }
 
-pub fn render(path: String) -> SarusResult<EDF> {
-    let config = load_config();
-    let sp = get_search_paths(config.edf_system_search_path);
+pub fn render_from_search_paths(path: String, search_paths: Vec<String>) -> SarusResult<EDF> {
+    let sp = search_paths;
     let max_levels = 10;
     let loop_count = 0;
     let raw = render_inner_loop(path, None, &sp, loop_count, max_levels)?;
     let e = EDF::try_from(raw)?;
     Ok(e)
+}
+
+pub fn render(path: String) -> SarusResult<EDF> {
+    let sp = get_search_paths();
+    render_from_search_paths(path, sp)
 }
 
 #[cfg(test)]
@@ -704,9 +730,7 @@ mod tests {
 
     #[test]
     fn file_not_found() {
-        let result = render(
-            String::from("src/toml/not_found.toml")
-        );
+        let result = render(String::from("src/toml/not_found.toml"));
         assert!(result.is_err());
     }
 
