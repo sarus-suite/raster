@@ -8,7 +8,7 @@ use std::path::Path;
 use toml::Value;
 use toml::map::Map;
 
-use crate::common::{expand_vars_hashmap, expand_vars_string, expand_vars_vec};
+use crate::common::{expand_vars_hashmap, expand_vars_vec};
 use crate::config::load_config;
 use crate::error::{SarusError, SarusResult};
 use crate::mount::{SarusMounts, sarus_mounts_from_strings};
@@ -17,6 +17,8 @@ pub mod common;
 pub mod config;
 pub mod error;
 pub mod mount;
+
+pub use crate::common::expand_vars_string;
 
 #[allow(dead_code)]
 #[derive(Derivative, Serialize, Deserialize, Clone)]
@@ -182,83 +184,86 @@ fn get_default_writable() -> bool {
     return true;
 }
 
-impl TryFrom<RawEDF> for EDF {
+/*
+impl TryFrom<RawEDF, uenv: &Option<HashMap<String,String>>> for EDF {
     type Error = SarusError;
 
-    fn try_from(r: RawEDF) -> SarusResult<Self> {
-        Ok(EDF {
-            annotations: match r.annotations {
-                Some(s) => annotations_as_hashmap(s),
-                None => get_default_annotations(),
-            },
-            devices: match r.devices {
-                Some(s) => s,
-                None => get_default_devices(),
-            },
-            entrypoint: match r.entrypoint {
-                Some(s) => s,
-                None => get_default_entrypoint(),
-            },
-            env: match r.env {
-                Some(s) => s,
-                None => get_default_env(),
-            },
-            image: match r.image {
-                Some(s) => s,
-                None => {
-                    return Err(SarusError {
-                        code: 7,
-                        file_path: None,
-                        msg: String::from("missing image specification"),
-                    });
-                }
-            },
-            mounts: match r.mounts {
-                Some(s) => sarus_mounts_from_strings(s)?,
-                None => get_default_mounts(),
-            },
-            parallax_enable: match r.parallax_enable {
-                Some(s) => s,
-                None => get_default_parallax_enable(),
-            },
-            parallax_imagestore: match r.parallax_imagestore {
-                Some(s) => s,
-                None => get_default_parallax_imagestore(),
-            },
-            parallax_mount_program: match r.parallax_mount_program {
-                Some(s) => s,
-                None => get_default_parallax_mount_program(),
-            },
-            parallax_path: match r.parallax_path {
-                Some(s) => s,
-                None => get_default_parallax_path(),
-            },
-            perfmon: match r.perfmon {
-                Some(s) => s,
-                None => get_default_perfmon(),
-            },
-            podman_module: match r.podman_module {
-                Some(s) => s,
-                None => get_default_podman_module(),
-            },
-            podman_path: match r.podman_path {
-                Some(s) => s,
-                None => get_default_podman_path(),
-            },
-            podman_tmp_path: match r.podman_tmp_path {
-                Some(s) => s,
-                None => get_default_podman_tmp_path(),
-            },
-            workdir: match r.workdir {
-                Some(s) => s,
-                None => get_default_workdir(),
-            },
-            writable: match r.writable {
-                Some(s) => s,
-                None => get_default_writable(),
-            },
-        })
-    }
+    fn try_from(r: RawEDF, uenv: &Option<HashMap<String,String>>) -> SarusResult<Self> {
+*/
+fn edf_from_raw(r: RawEDF, uenv: &Option<HashMap<String, String>>) -> SarusResult<EDF> {
+    Ok(EDF {
+        annotations: match r.annotations {
+            Some(s) => annotations_as_hashmap(s),
+            None => get_default_annotations(),
+        },
+        devices: match r.devices {
+            Some(s) => s,
+            None => get_default_devices(),
+        },
+        entrypoint: match r.entrypoint {
+            Some(s) => s,
+            None => get_default_entrypoint(),
+        },
+        env: match r.env {
+            Some(s) => s,
+            None => get_default_env(),
+        },
+        image: match r.image {
+            Some(s) => s,
+            None => {
+                return Err(SarusError {
+                    code: 7,
+                    file_path: None,
+                    msg: String::from("missing image specification"),
+                });
+            }
+        },
+        mounts: match r.mounts {
+            Some(s) => sarus_mounts_from_strings(s, uenv)?,
+            None => get_default_mounts(),
+        },
+        parallax_enable: match r.parallax_enable {
+            Some(s) => s,
+            None => get_default_parallax_enable(),
+        },
+        parallax_imagestore: match r.parallax_imagestore {
+            Some(s) => s,
+            None => get_default_parallax_imagestore(),
+        },
+        parallax_mount_program: match r.parallax_mount_program {
+            Some(s) => s,
+            None => get_default_parallax_mount_program(),
+        },
+        parallax_path: match r.parallax_path {
+            Some(s) => s,
+            None => get_default_parallax_path(),
+        },
+        perfmon: match r.perfmon {
+            Some(s) => s,
+            None => get_default_perfmon(),
+        },
+        podman_module: match r.podman_module {
+            Some(s) => s,
+            None => get_default_podman_module(),
+        },
+        podman_path: match r.podman_path {
+            Some(s) => s,
+            None => get_default_podman_path(),
+        },
+        podman_tmp_path: match r.podman_tmp_path {
+            Some(s) => s,
+            None => get_default_podman_tmp_path(),
+        },
+        workdir: match r.workdir {
+            Some(s) => s,
+            None => get_default_workdir(),
+        },
+        writable: match r.writable {
+            Some(s) => s,
+            None => get_default_writable(),
+        },
+    })
+    //    }
 }
 
 fn load(file_path: &str) -> Result<String, Box<dyn Error>> {
@@ -413,11 +418,15 @@ pub fn get_user_search_paths() -> Vec<String> {
     search_paths
 }
 
-fn resolve_env_path(env: String, sp: &Vec<String>) -> SarusResult<String> {
+fn resolve_env_path(
+    env: String,
+    sp: &Vec<String>,
+    uenv: &Option<HashMap<String, String>>,
+) -> SarusResult<String> {
     let mut retopt = None;
     let mut file_path;
 
-    let ee = expand_vars_string(env)?;
+    let ee = expand_vars_string(env, uenv)?;
 
     // it doesn't look like a file_path
     if ![".", "/"].iter().any(|s| ee.starts_with(*s)) && !ee.ends_with(".toml") {
@@ -466,6 +475,7 @@ fn render_inner_loop(
     name: String,
     oedf: Option<&RawEDF>,
     sp: &Vec<String>,
+    env: &Option<HashMap<String, String>>,
     mut count: u64,
     max: u64,
 ) -> SarusResult<RawEDF> {
@@ -480,7 +490,7 @@ fn render_inner_loop(
         });
     }
 
-    let edf_path = resolve_env_path(name.clone(), sp)?;
+    let edf_path = resolve_env_path(name.clone(), sp, env)?;
 
     validate(edf_path.clone())?;
 
@@ -520,7 +530,14 @@ fn render_inner_loop(
         };
 
         for b in ba.iter() {
-            ei = Some(render_inner_loop(b.to_string(), oedf, &sp, count, max)?);
+            ei = Some(render_inner_loop(
+                b.to_string(),
+                oedf,
+                &sp,
+                env,
+                count,
+                max,
+            )?);
         }
         e.base_environment = None;
     }
@@ -534,12 +551,12 @@ fn render_inner_loop(
                     let mut a1 = annotations_as_hashmap(a);
                     let b1 = annotations_as_hashmap(b);
                     a1.extend(b1.clone());
-                    a1 = expand_vars_hashmap(a1)?;
+                    a1 = expand_vars_hashmap(a1, env)?;
                     e.annotations = Some(Annotations::TypeHashMap(a1));
                 }
                 None => {
                     let mut a1 = annotations_as_hashmap(a);
-                    a1 = expand_vars_hashmap(a1)?;
+                    a1 = expand_vars_hashmap(a1, env)?;
                     e.annotations = Some(Annotations::TypeHashMap(a1));
                 }
             },
@@ -645,7 +662,7 @@ fn render_inner_loop(
 
     if e.devices.is_some() {
         // Expand variables
-        e.devices = Some(expand_vars_vec(e.devices.unwrap())?);
+        e.devices = Some(expand_vars_vec(e.devices.unwrap(), env)?);
 
         //Remove duplicates from devices
         let dev = e.devices.clone().unwrap();
@@ -654,54 +671,60 @@ fn render_inner_loop(
         e.devices = Some(dev_unique_vec);
     }
     if e.env.is_some() {
-        e.env = Some(expand_vars_hashmap(e.env.unwrap())?);
+        e.env = Some(expand_vars_hashmap(e.env.unwrap(), env)?);
     }
     if e.annotations.is_some() {
         let a = e.annotations.unwrap();
         let mut h = annotations_as_hashmap(a);
-        h = expand_vars_hashmap(h)?;
+        h = expand_vars_hashmap(h, env)?;
         e.annotations = Some(Annotations::TypeHashMap(h));
     }
     if e.engine.is_some() {
-        e.engine = Some(expand_vars_string(e.engine.unwrap())?);
+        e.engine = Some(expand_vars_string(e.engine.unwrap(), env)?);
     }
     if e.parallax_imagestore.is_some() {
-        e.parallax_imagestore = Some(expand_vars_string(e.parallax_imagestore.unwrap())?);
+        e.parallax_imagestore = Some(expand_vars_string(e.parallax_imagestore.unwrap(), env)?);
     }
     if e.parallax_path.is_some() {
-        e.parallax_path = Some(expand_vars_string(e.parallax_path.unwrap())?);
+        e.parallax_path = Some(expand_vars_string(e.parallax_path.unwrap(), env)?);
     }
     if e.parallax_mount_program.is_some() {
-        e.parallax_mount_program = Some(expand_vars_string(e.parallax_mount_program.unwrap())?);
+        e.parallax_mount_program =
+            Some(expand_vars_string(e.parallax_mount_program.unwrap(), env)?);
     }
     if e.podman_module.is_some() {
-        e.podman_module = Some(expand_vars_string(e.podman_module.unwrap())?);
+        e.podman_module = Some(expand_vars_string(e.podman_module.unwrap(), env)?);
     }
     if e.podman_path.is_some() {
-        e.podman_path = Some(expand_vars_string(e.podman_path.unwrap())?);
+        e.podman_path = Some(expand_vars_string(e.podman_path.unwrap(), env)?);
     }
     if e.podman_tmp_path.is_some() {
-        e.podman_tmp_path = Some(expand_vars_string(e.podman_tmp_path.unwrap())?);
+        e.podman_tmp_path = Some(expand_vars_string(e.podman_tmp_path.unwrap(), env)?);
     }
     if e.workdir.is_some() {
-        e.workdir = Some(expand_vars_string(e.workdir.unwrap())?);
+        e.workdir = Some(expand_vars_string(e.workdir.unwrap(), env)?);
     }
 
     return Ok(e);
 }
 
-pub fn render_from_search_paths(path: String, search_paths: Vec<String>) -> SarusResult<EDF> {
+pub fn render_from_search_paths(
+    path: String,
+    search_paths: Vec<String>,
+    env: &Option<HashMap<String, String>>,
+) -> SarusResult<EDF> {
     let sp = search_paths;
     let max_levels = 10;
     let loop_count = 0;
-    let raw = render_inner_loop(path, None, &sp, loop_count, max_levels)?;
-    let e = EDF::try_from(raw)?;
+    let raw = render_inner_loop(path, None, &sp, env, loop_count, max_levels)?;
+    //let e = EDF::try_from(raw, env)?;
+    let e = edf_from_raw(raw, env)?;
     Ok(e)
 }
 
 pub fn render(path: String) -> SarusResult<EDF> {
     let sp = get_search_paths();
-    render_from_search_paths(path, sp)
+    render_from_search_paths(path, sp, &None)
 }
 
 #[cfg(test)]

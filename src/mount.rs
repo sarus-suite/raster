@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::common::expand_vars_string;
 use crate::error::{SarusError, SarusResult};
@@ -14,7 +14,10 @@ pub struct SarusMount {
 }
 
 impl SarusMount {
-    pub fn try_new(input: String) -> SarusResult<SarusMount> {
+    pub fn try_new(
+        input: String,
+        uenv: &Option<HashMap<String, String>>,
+    ) -> SarusResult<SarusMount> {
         let mut a = input.split(":");
         let asize = a.clone().count();
 
@@ -98,8 +101,8 @@ impl SarusMount {
 
         let mut es = escape_mount(String::from(s));
         let mut et = escape_mount(String::from(t));
-        es = expand_vars_string(es)?;
-        et = expand_vars_string(et)?;
+        es = expand_vars_string(es, uenv)?;
+        et = expand_vars_string(et, uenv)?;
 
         let em;
 
@@ -134,10 +137,10 @@ impl SarusMount {
             } else {
                 flags = String::new();
             }
-            let ex = expand_vars_string(flags)?;
+            let flags = expand_vars_string(flags, uenv)?;
 
             // Remove duplicate flags
-            let parts: Vec<_> = ex.split(',').collect();
+            let parts: Vec<_> = flags.split(',').collect();
             let parts_set: HashSet<_> = parts.into_iter().collect();
             let parts_unique_vec: Vec<_> = parts_set.into_iter().collect();
             let ef = parts_unique_vec.join(",");
@@ -161,11 +164,14 @@ impl SarusMount {
     }
 }
 
-pub fn sarus_mounts_from_strings(input: Vec<String>) -> SarusResult<SarusMounts> {
+pub fn sarus_mounts_from_strings(
+    input: Vec<String>,
+    uenv: &Option<HashMap<String, String>>,
+) -> SarusResult<SarusMounts> {
     let mut res = vec![];
 
     for i in input.iter() {
-        let m = SarusMount::try_new(i.clone())?;
+        let m = SarusMount::try_new(i.clone(), uenv)?;
         if !res.contains(&m) {
             res.push(m.clone());
         }
