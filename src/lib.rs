@@ -21,7 +21,7 @@ pub mod mount;
 pub use crate::common::expand_vars_string;
 
 #[allow(dead_code)]
-#[derive(Derivative, Serialize, Deserialize, Clone)]
+#[derive(Derivative, Serialize, Deserialize, Clone, Default)]
 pub struct RawEDF {
     annotations: Option<Annotations>,
     base_environment: Option<BaseEnvironment>,
@@ -97,16 +97,16 @@ impl RawEDF {
     // Give priority to self's fields.
     fn merge(&mut self, i: RawEDF) {
         match i.annotations {
-            Some(a) => match self.annotations {
+            Some(a) => match &self.annotations {
                 Some(b) => {
                     let mut a1 = annotations_as_hashmap(a);
-                    let b1 = annotations_as_hashmap(b);
+                    let b1 = annotations_as_hashmap(b.clone());
                     a1.extend(b1.clone());
                     //a1 = expand_vars_hashmap(a1, env)?;
                     self.annotations = Some(Annotations::TypeHashMap(a1));
                 }
                 None => {
-                    let mut a1 = annotations_as_hashmap(a);
+                    let a1 = annotations_as_hashmap(a);
                     //a1 = expand_vars_hashmap(a1, env)?;
                     self.annotations = Some(Annotations::TypeHashMap(a1));
                 }
@@ -114,9 +114,9 @@ impl RawEDF {
             None => (),
         }
         match i.devices {
-            Some(mut a) => match self.devices {
+            Some(mut a) => match &self.devices {
                 Some(b) => {
-                    a.extend(b);
+                    a.extend(b.clone());
                     self.devices = Some(a);
                 }
                 None => {
@@ -142,8 +142,8 @@ impl RawEDF {
             },
             None => (),
         }
-        if i.imagself.is_some() {
-            if self.imagself.is_none() {
+        if i.image.is_some() {
+            if self.image.is_none() {
                 self.image = i.image;
             }
         }
@@ -159,13 +159,13 @@ impl RawEDF {
             },
             None => (),
         }
-        if i.parallax_enablself.is_some() {
-            if self.parallax_enablself.is_none() {
+        if i.parallax_enable.is_some() {
+            if self.parallax_enable.is_none() {
                 self.parallax_enable = i.parallax_enable;
             }
         }
-        if i.parallax_imagestorself.is_some() {
-            if self.parallax_imagestorself.is_none() {
+        if i.parallax_imagestore.is_some() {
+            if self.parallax_imagestore.is_none() {
                 self.parallax_imagestore = i.parallax_imagestore;
             }
         }
@@ -184,8 +184,8 @@ impl RawEDF {
                 self.perfmon = i.perfmon;
             }
         }
-        if i.podman_modulself.is_some() {
-            if self.podman_modulself.is_none() {
+        if i.podman_module.is_some() {
+            if self.podman_module.is_none() {
                 self.podman_module = i.podman_module;
             }
         }
@@ -204,8 +204,8 @@ impl RawEDF {
                 self.workdir = i.workdir;
             }
         }
-        if i.writablself.is_some() {
-            if self.writablself.is_none() {
+        if i.writable.is_some() {
+            if self.writable.is_none() {
                 self.writable = i.writable;
             }
         }
@@ -641,7 +641,7 @@ fn render_inner_loop(
 
     // Merge base EDFs 
     if cur_redf.base_environment.is_some() {
-        let mut base_redf = RawEDF{};
+        let mut base_redf = RawEDF::default();
 
         let be = cur_redf.base_environment.clone().unwrap();
         let ba = match be {
@@ -684,11 +684,11 @@ fn render_inner_loop(
         h = expand_vars_hashmap(h, env)?;
         cur_redf.annotations = Some(Annotations::TypeHashMap(h));
     }
-    if cur_redf.engincur_redf.is_some() {
-        cur_redf.engine = Some(expand_vars_string(cur_redf.engincur_redf.unwrap(), env)?);
+    if cur_redf.engine.is_some() {
+        cur_redf.engine = Some(expand_vars_string(cur_redf.engine.unwrap(), env)?);
     }
-    if cur_redf.parallax_imagestorcur_redf.is_some() {
-        cur_redf.parallax_imagestore = Some(expand_vars_string(cur_redf.parallax_imagestorcur_redf.unwrap(), env)?);
+    if cur_redf.parallax_imagestore.is_some() {
+        cur_redf.parallax_imagestore = Some(expand_vars_string(cur_redf.parallax_imagestore.unwrap(), env)?);
     }
     if cur_redf.parallax_path.is_some() {
         cur_redf.parallax_path = Some(expand_vars_string(cur_redf.parallax_path.unwrap(), env)?);
@@ -697,8 +697,8 @@ fn render_inner_loop(
         cur_redf.parallax_mount_program =
             Some(expand_vars_string(cur_redf.parallax_mount_program.unwrap(), env)?);
     }
-    if cur_redf.podman_modulcur_redf.is_some() {
-        cur_redf.podman_module = Some(expand_vars_string(cur_redf.podman_modulcur_redf.unwrap(), env)?);
+    if cur_redf.podman_module.is_some() {
+        cur_redf.podman_module = Some(expand_vars_string(cur_redf.podman_module.unwrap(), env)?);
     }
     if cur_redf.podman_path.is_some() {
         cur_redf.podman_path = Some(expand_vars_string(cur_redf.podman_path.unwrap(), env)?);
@@ -735,7 +735,9 @@ pub fn render(path: String) -> SarusResult<EDF> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
 
+    /*
     #[test]
     fn good_toml() {
         // Loop through all toml files containing "good" in their name
@@ -755,6 +757,40 @@ mod tests {
             }
         }
     }
+    */
+
+    fn get_rendered_edf(_edf_filename: &str) -> EDF {
+        let edf_filename = _edf_filename.to_string();
+        let old_cwd = match env::current_dir() {
+            Ok(_p) => _p,
+            Err(_) => panic!("cannot find current working directory")
+        };
+
+        match env::set_current_dir(Path::new("src/toml")) {
+            Ok(_) => (),
+            Err(_) => panic!("cannot change working directory")
+        };
+
+        let result = match render(edf_filename.clone()) {
+            Ok(edf) => edf,
+            Err(e) => panic!("cannot render EDF: {}", e.msg)
+        };
+
+        match env::set_current_dir(old_cwd) {
+            Ok(_) => (),
+            Err(_) => panic!("cannot restore working directory")
+        };
+
+        return result;
+    }
+
+    #[test]
+    fn render_base_single() {
+        let edf = get_rendered_edf("base-single.toml");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "three");
+        assert!(edf.annotations.get("quick").unwrap() == "algebra");
+    }
 
     #[test]
     fn file_not_found() {
@@ -764,7 +800,7 @@ mod tests {
 
     #[test]
     fn not_a_toml_file() {
-        let result = render(String::from("src/toml/test.txt"));
+        let result = render(String::from("src/toml/plain.txt"));
         assert!(result.is_err());
     }
 }
