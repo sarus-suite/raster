@@ -1,0 +1,8 @@
+base_environment = [ "./anno.toml", "./top-simple.toml", "./env.toml" ]
+image = "fedora"
+
+[anno]
+quick = "algebra"
+
+[env]
+quick = "counting"

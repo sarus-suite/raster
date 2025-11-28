@@ -1,0 +1,4 @@
+base_environment = "./anno.toml"
+
+[anno]
+quick = "algebra"

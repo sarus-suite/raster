@@ -93,6 +93,125 @@ pub enum Annotations {
     TypeHashMap(HashMap<String, String>),
 }
 
+impl RawEDF {
+    // Give priority to self's fields.
+    fn merge(&mut self, i: RawEDF) {
+        match i.annotations {
+            Some(a) => match self.annotations {
+                Some(b) => {
+                    let mut a1 = annotations_as_hashmap(a);
+                    let b1 = annotations_as_hashmap(b);
+                    a1.extend(b1.clone());
+                    //a1 = expand_vars_hashmap(a1, env)?;
+                    self.annotations = Some(Annotations::TypeHashMap(a1));
+                }
+                None => {
+                    let mut a1 = annotations_as_hashmap(a);
+                    //a1 = expand_vars_hashmap(a1, env)?;
+                    self.annotations = Some(Annotations::TypeHashMap(a1));
+                }
+            },
+            None => (),
+        }
+        match i.devices {
+            Some(mut a) => match self.devices {
+                Some(b) => {
+                    a.extend(b);
+                    self.devices = Some(a);
+                }
+                None => {
+                    self.devices = Some(a);
+                }
+            },
+            None => (),
+        }
+        if i.entrypoint.is_some() {
+            if self.entrypoint.is_none() {
+                self.entrypoint = i.entrypoint;
+            }
+        }
+        match i.env {
+            Some(mut a) => match self.env {
+                Some(ref mut b) => {
+                    a.extend(b.clone());
+                    self.env = Some(a);
+                }
+                None => {
+                    self.env = Some(a);
+                }
+            },
+            None => (),
+        }
+        if i.imagself.is_some() {
+            if self.imagself.is_none() {
+                self.image = i.image;
+            }
+        }
+        match i.mounts {
+            Some(mut a) => match self.mounts {
+                Some(ref mut b) => {
+                    a.append(b);
+                    self.mounts = Some(a);
+                }
+                None => {
+                    self.mounts = Some(a);
+                }
+            },
+            None => (),
+        }
+        if i.parallax_enablself.is_some() {
+            if self.parallax_enablself.is_none() {
+                self.parallax_enable = i.parallax_enable;
+            }
+        }
+        if i.parallax_imagestorself.is_some() {
+            if self.parallax_imagestorself.is_none() {
+                self.parallax_imagestore = i.parallax_imagestore;
+            }
+        }
+        if i.parallax_mount_program.is_some() {
+            if self.parallax_mount_program.is_none() {
+                self.parallax_mount_program = i.parallax_mount_program;
+            }
+        }
+        if i.parallax_path.is_some() {
+            if self.parallax_path.is_none() {
+                self.parallax_path = i.parallax_path;
+            }
+        }
+        if i.perfmon.is_some() {
+            if self.perfmon.is_none() {
+                self.perfmon = i.perfmon;
+            }
+        }
+        if i.podman_modulself.is_some() {
+            if self.podman_modulself.is_none() {
+                self.podman_module = i.podman_module;
+            }
+        }
+        if i.podman_path.is_some() {
+            if self.podman_path.is_none() {
+                self.podman_path = i.podman_path;
+            }
+        }
+        if i.podman_tmp_path.is_some() {
+            if self.podman_tmp_path.is_none() {
+                self.podman_tmp_path = i.podman_tmp_path;
+            }
+        }
+        if i.workdir.is_some() {
+            if self.workdir.is_none() {
+                self.workdir = i.workdir;
+            }
+        }
+        if i.writablself.is_some() {
+            if self.writablself.is_none() {
+                self.writable = i.writable;
+            }
+        }
+    }
+}
+
 fn annotations_as_hashmap(a: Annotations) -> HashMap<String, String> {
     let r = match a {
         Annotations::TypeHashMap(h) => h,
@@ -491,9 +610,9 @@ fn render_inner_loop(
     }
 
     let edf_path = resolve_env_path(name.clone(), sp, env)?;
-
     validate(edf_path.clone())?;
 
+    // Create current raw EDF
     let path_str = edf_path.as_str();
 
     let toml_content = match load(path_str) {
@@ -518,194 +637,80 @@ fn render_inner_loop(
         }
     };
 
-    let mut e: RawEDF = toml_value;
-    let mut ei = None;
+    let mut cur_redf: RawEDF = toml_value;
 
-    if e.base_environment.is_some() {
-        let be = e.base_environment.clone().unwrap();
+    // Merge base EDFs 
+    if cur_redf.base_environment.is_some() {
+        let mut base_redf = RawEDF{};
 
+        let be = cur_redf.base_environment.clone().unwrap();
         let ba = match be {
             BaseEnvironment::TypeString(s) => vec![s],
             BaseEnvironment::TypeVec(a) => a,
         };
 
         for b in ba.iter() {
-            ei = Some(render_inner_loop(
+            let _base_redf= render_inner_loop(
                 b.to_string(),
                 oedf,
                 &sp,
                 env,
                 count,
                 max,
-            )?);
+            )?;
+            base_redf.merge(_base_redf);
         }
-        e.base_environment = None;
+        cur_redf.base_environment = None;
+
+        cur_redf.merge(base_redf);
     }
 
-    if ei.is_some() {
-        let i = ei.unwrap();
+    // Expand variables in the fields
+    if cur_redf.devices.is_some() {
+        cur_redf.devices = Some(expand_vars_vec(cur_redf.devices.unwrap(), env)?);
 
-        match i.annotations {
-            Some(a) => match e.annotations {
-                Some(b) => {
-                    let mut a1 = annotations_as_hashmap(a);
-                    let b1 = annotations_as_hashmap(b);
-                    a1.extend(b1.clone());
-                    a1 = expand_vars_hashmap(a1, env)?;
-                    e.annotations = Some(Annotations::TypeHashMap(a1));
-                }
-                None => {
-                    let mut a1 = annotations_as_hashmap(a);
-                    a1 = expand_vars_hashmap(a1, env)?;
-                    e.annotations = Some(Annotations::TypeHashMap(a1));
-                }
-            },
-            None => (),
-        }
-        match i.devices {
-            Some(mut a) => match e.devices {
-                Some(b) => {
-                    a.extend(b);
-                    e.devices = Some(a);
-                }
-                None => {
-                    e.devices = Some(a);
-                }
-            },
-            None => (),
-        }
-        if i.entrypoint.is_some() {
-            if e.entrypoint.is_none() {
-                e.entrypoint = i.entrypoint;
-            }
-        }
-        match i.env {
-            Some(mut a) => match e.env {
-                Some(ref mut b) => {
-                    a.extend(b.clone());
-                    e.env = Some(a);
-                }
-                None => {
-                    e.env = Some(a);
-                }
-            },
-            None => (),
-        }
-        if i.image.is_some() {
-            if e.image.is_none() {
-                e.image = i.image;
-            }
-        }
-        match i.mounts {
-            Some(mut a) => match e.mounts {
-                Some(ref mut b) => {
-                    a.append(b);
-                    e.mounts = Some(a);
-                }
-                None => {
-                    e.mounts = Some(a);
-                }
-            },
-            None => (),
-        }
-        if i.parallax_enable.is_some() {
-            if e.parallax_enable.is_none() {
-                e.parallax_enable = i.parallax_enable;
-            }
-        }
-        if i.parallax_imagestore.is_some() {
-            if e.parallax_imagestore.is_none() {
-                e.parallax_imagestore = i.parallax_imagestore;
-            }
-        }
-        if i.parallax_mount_program.is_some() {
-            if e.parallax_mount_program.is_none() {
-                e.parallax_mount_program = i.parallax_mount_program;
-            }
-        }
-        if i.parallax_path.is_some() {
-            if e.parallax_path.is_none() {
-                e.parallax_path = i.parallax_path;
-            }
-        }
-        if i.perfmon.is_some() {
-            if e.perfmon.is_none() {
-                e.perfmon = i.perfmon;
-            }
-        }
-        if i.podman_module.is_some() {
-            if e.podman_module.is_none() {
-                e.podman_module = i.podman_module;
-            }
-        }
-        if i.podman_path.is_some() {
-            if e.podman_path.is_none() {
-                e.podman_path = i.podman_path;
-            }
-        }
-        if i.podman_tmp_path.is_some() {
-            if e.podman_tmp_path.is_none() {
-                e.podman_tmp_path = i.podman_tmp_path;
-            }
-        }
-        if i.workdir.is_some() {
-            if e.workdir.is_none() {
-                e.workdir = i.workdir;
-            }
-        }
-        if i.writable.is_some() {
-            if e.writable.is_none() {
-                e.writable = i.writable;
-            }
-        }
-    }
-
-    if e.devices.is_some() {
-        // Expand variables
-        e.devices = Some(expand_vars_vec(e.devices.unwrap(), env)?);
-
-        //Remove duplicates from devices
-        let dev = e.devices.clone().unwrap();
+        // Remove duplicates from devices
+        let dev = cur_redf.devices.clone().unwrap();
         let dev_set: HashSet<_> = dev.into_iter().collect();
         let dev_unique_vec: Vec<_> = dev_set.into_iter().collect();
-        e.devices = Some(dev_unique_vec);
+        cur_redf.devices = Some(dev_unique_vec);
     }
-    if e.env.is_some() {
-        e.env = Some(expand_vars_hashmap(e.env.unwrap(), env)?);
+    if cur_redf.env.is_some() {
+        cur_redf.env = Some(expand_vars_hashmap(cur_redf.env.unwrap(), env)?);
     }
-    if e.annotations.is_some() {
-        let a = e.annotations.unwrap();
+    if cur_redf.annotations.is_some() {
+        let a = cur_redf.annotations.unwrap();
         let mut h = annotations_as_hashmap(a);
         h = expand_vars_hashmap(h, env)?;
-        e.annotations = Some(Annotations::TypeHashMap(h));
+        cur_redf.annotations = Some(Annotations::TypeHashMap(h));
     }
-    if e.engine.is_some() {
-        e.engine = Some(expand_vars_string(e.engine.unwrap(), env)?);
+    if cur_redf.engincur_redf.is_some() {
+        cur_redf.engine = Some(expand_vars_string(cur_redf.engincur_redf.unwrap(), env)?);
     }
-    if e.parallax_imagestore.is_some() {
-        e.parallax_imagestore = Some(expand_vars_string(e.parallax_imagestore.unwrap(), env)?);
+    if cur_redf.parallax_imagestorcur_redf.is_some() {
+        cur_redf.parallax_imagestore = Some(expand_vars_string(cur_redf.parallax_imagestorcur_redf.unwrap(), env)?);
     }
-    if e.parallax_path.is_some() {
-        e.parallax_path = Some(expand_vars_string(e.parallax_path.unwrap(), env)?);
+    if cur_redf.parallax_path.is_some() {
+        cur_redf.parallax_path = Some(expand_vars_string(cur_redf.parallax_path.unwrap(), env)?);
     }
-    if e.parallax_mount_program.is_some() {
-        e.parallax_mount_program =
-            Some(expand_vars_string(e.parallax_mount_program.unwrap(), env)?);
+    if cur_redf.parallax_mount_program.is_some() {
+        cur_redf.parallax_mount_program =
+            Some(expand_vars_string(cur_redf.parallax_mount_program.unwrap(), env)?);
     }
-    if e.podman_module.is_some() {
-        e.podman_module = Some(expand_vars_string(e.podman_module.unwrap(), env)?);
+    if cur_redf.podman_modulcur_redf.is_some() {
+        cur_redf.podman_module = Some(expand_vars_string(cur_redf.podman_modulcur_redf.unwrap(), env)?);
     }
-    if e.podman_path.is_some() {
-        e.podman_path = Some(expand_vars_string(e.podman_path.unwrap(), env)?);
+    if cur_redf.podman_path.is_some() {
+        cur_redf.podman_path = Some(expand_vars_string(cur_redf.podman_path.unwrap(), env)?);
     }
-    if e.podman_tmp_path.is_some() {
-        e.podman_tmp_path = Some(expand_vars_string(e.podman_tmp_path.unwrap(), env)?);
+    if cur_redf.podman_tmp_path.is_some() {
+        cur_redf.podman_tmp_path = Some(expand_vars_string(cur_redf.podman_tmp_path.unwrap(), env)?);
     }
-    if e.workdir.is_some() {
-        e.workdir = Some(expand_vars_string(e.workdir.unwrap(), env)?);
+    if cur_redf.workdir.is_some() {
+        cur_redf.workdir = Some(expand_vars_string(cur_redf.workdir.unwrap(), env)?);
     }
 
-    return Ok(e);
+    return Ok(cur_redf);
 }
 
 pub fn render_from_search_paths(
