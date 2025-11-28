@@ -650,7 +650,7 @@ fn render_inner_loop(
         };
 
         for b in ba.iter() {
-            let _base_redf= render_inner_loop(
+            let mut _base_redf= render_inner_loop(
                 b.to_string(),
                 oedf,
                 &sp,
@@ -658,7 +658,9 @@ fn render_inner_loop(
                 count,
                 max,
             )?;
-            base_redf.merge(_base_redf);
+            println!("{} {}", b, _base_redf.image.clone().unwrap());
+            _base_redf.merge(base_redf);
+            base_redf = _base_redf;
         }
         cur_redf.base_environment = None;
 
@@ -768,7 +770,7 @@ mod tests {
 
         match env::set_current_dir(Path::new("src/toml")) {
             Ok(_) => (),
-            Err(_) => panic!("cannot change working directory")
+            Err(_) => panic!("cannot change working directory, cwd: {}", old_cwd.display())
         };
 
         let result = match render(edf_filename.clone()) {
@@ -787,6 +789,17 @@ mod tests {
     #[test]
     fn render_base_single() {
         let edf = get_rendered_edf("base-single.toml");
+        assert!(edf.image == "alpine");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "three");
+        assert!(edf.annotations.get("quick").unwrap() == "algebra");
+    }
+
+    #[test]
+    fn render_base_multi_1() {
+        let edf = get_rendered_edf("base-multi-1.toml");
+        print!("{}", edf.image);
+        assert!(edf.image == "ubuntu");
         assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
         assert!(edf.annotations.get("minus_one").unwrap() == "three");
         assert!(edf.annotations.get("quick").unwrap() == "algebra");

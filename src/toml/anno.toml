@@ -1,4 +1,4 @@
-image = "dummy"
+image = "alpine"
 
 [annotations]
 two_plus_two = "four"
