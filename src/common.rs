@@ -108,10 +108,7 @@ pub fn expand_vars_vec(
 mod tests {
     use super::*;
 
-    fn check_expand_vars_string(
-        input: &str,
-        expected: &str
-    ) -> bool {
+    fn check_expand_vars_string(input: &str, expected: &str) -> bool {
         let mut env = HashMap::new();
         env.insert("XXX".to_string(), "111".to_string());
         match expand_vars_string_with_env(input.to_string(), &env) {
@@ -125,14 +122,35 @@ mod tests {
 
     #[test]
     fn expand_vars_normal_strs() {
-        assert!(check_expand_vars_string(r#"xxx-$XXX-xxx"#, r#"xxx-111-xxx"#));
-        assert!(check_expand_vars_string(r#"xxx-${XXX}-xxx"#, r#"xxx-111-xxx"#));
-        assert!(check_expand_vars_string(r#"xxx-${XXX:1}-xxx"#, r#"xxx-11-xxx"#));
-        assert!(check_expand_vars_string(r#"xxx-${YYY:-222}-xxx"#, r#"xxx-222-xxx"#));
+        assert!(check_expand_vars_string(
+            r#"xxx-$XXX-xxx"#,
+            r#"xxx-111-xxx"#
+        ));
+        assert!(check_expand_vars_string(
+            r#"xxx-${XXX}-xxx"#,
+            r#"xxx-111-xxx"#
+        ));
+        assert!(check_expand_vars_string(
+            r#"xxx-${XXX:1}-xxx"#,
+            r#"xxx-11-xxx"#
+        ));
+        assert!(check_expand_vars_string(
+            r#"xxx-${YYY:-222}-xxx"#,
+            r#"xxx-222-xxx"#
+        ));
         assert!(check_expand_vars_string(r#"xxx-${YYY}-xxx"#, r#"xxx--xxx"#));
-        assert!(check_expand_vars_string(r#"xxx-\$(XXX)-xxx"#, r#"xxx-$(XXX)-xxx"#));
-        assert!(check_expand_vars_string(r#"xxx-$\(XXX)-xxx"#, r#"xxx-$\(XXX)-xxx"#));
-        assert!(check_expand_vars_string(r#"xxx-\`XXX\`-xxx"#, r#"xxx-`XXX`-xxx"#));
+        assert!(check_expand_vars_string(
+            r#"xxx-\$(XXX)-xxx"#,
+            r#"xxx-$(XXX)-xxx"#
+        ));
+        assert!(check_expand_vars_string(
+            r#"xxx-$\(XXX)-xxx"#,
+            r#"xxx-$\(XXX)-xxx"#
+        ));
+        assert!(check_expand_vars_string(
+            r#"xxx-\`XXX\`-xxx"#,
+            r#"xxx-`XXX`-xxx"#
+        ));
         assert!(check_expand_vars_string(r#"xxx--xxx\;"#, r#"xxx--xxx\;"#));
         assert!(check_expand_vars_string(r#"\"xxx--xxx\""#, r#""xxx--xxx""#));
     }

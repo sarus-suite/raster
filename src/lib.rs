@@ -21,7 +21,7 @@ pub mod mount;
 pub use crate::common::expand_vars_string;
 
 #[allow(dead_code)]
-#[derive(Derivative, Serialize, Deserialize, Clone)]
+#[derive(Derivative, Serialize, Deserialize, Clone, Default)]
 pub struct RawEDF {
     annotations: Option<Annotations>,
     base_environment: Option<BaseEnvironment>,
@@ -91,6 +91,89 @@ pub enum BaseEnvironment {
 pub enum Annotations {
     TypeMap(Map<String, Value>),
     TypeHashMap(HashMap<String, String>),
+}
+
+impl RawEDF {
+    // Overwrite fields and tables with the other raw EDF.
+    fn extend(&mut self, i: RawEDF) {
+        if i.annotations.is_some() {
+            let i_anno = i.annotations.unwrap();
+
+            let mut self_anno_hm = match &self.annotations {
+                Some(self_anno) => annotations_as_hashmap(self_anno.clone()),
+                None => HashMap::new()
+            };
+            let i_anno_hm = annotations_as_hashmap(i_anno);
+            self_anno_hm.extend(i_anno_hm.clone());
+
+            self.annotations = Some(Annotations::TypeHashMap(self_anno_hm));
+        }
+
+        if i.devices.is_some() {
+            if self.devices.is_some() {
+                let i_devices = i.devices.unwrap();
+                let self_devices = self.devices.as_mut().unwrap();
+                self_devices.extend(i_devices);
+            } else {
+                self.devices = i.devices;
+            }
+        }
+        if i.env.is_some() {
+            if self.env.is_some() {
+                let i_env = i.env.unwrap();
+                let self_env = self.env.as_mut().unwrap();
+                self_env.extend(i_env);
+            } else {
+                self.env = i.env;
+            }
+        }
+        if i.mounts.is_some() {
+            if self.mounts.is_some() {
+                let i_mounts = i.mounts.unwrap();
+                let self_mounts = self.mounts.as_mut().unwrap();
+                self_mounts.extend(i_mounts);
+            } else {
+                self.mounts = i.mounts;
+            }
+        }
+
+        if i.entrypoint.is_some() {
+            self.entrypoint = i.entrypoint;
+        }
+        if i.image.is_some() {
+            self.image = i.image;
+        }
+        if i.parallax_enable.is_some() {
+            self.parallax_enable = i.parallax_enable;
+        }
+        if i.parallax_imagestore.is_some() {
+            self.parallax_imagestore = i.parallax_imagestore;
+        }
+        if i.parallax_mount_program.is_some() {
+            self.parallax_mount_program = i.parallax_mount_program;
+        }
+        if i.parallax_path.is_some() {
+            self.parallax_path = i.parallax_path;
+        }
+        if i.perfmon.is_some() {
+            self.perfmon = i.perfmon;
+        }
+        if i.podman_module.is_some() {
+            self.podman_module = i.podman_module;
+        }
+        if i.podman_path.is_some() {
+            self.podman_path = i.podman_path;
+        }
+        if i.podman_tmp_path.is_some() {
+            self.podman_tmp_path = i.podman_tmp_path;
+        }
+        if i.workdir.is_some() {
+            self.workdir = i.workdir;
+        }
+        if i.writable.is_some() {
+            self.writable = i.writable;
+        }
+    }
 }
 
 fn annotations_as_hashmap(a: Annotations) -> HashMap<String, String> {
@@ -473,7 +556,6 @@ fn resolve_env_path(
 
 fn render_inner_loop(
     name: String,
-    oedf: Option<&RawEDF>,
     sp: &Vec<String>,
     env: &Option<HashMap<String, String>>,
     mut count: u64,
@@ -491,9 +573,9 @@ fn render_inner_loop(
     }
 
     let edf_path = resolve_env_path(name.clone(), sp, env)?;
-
     validate(edf_path.clone())?;
 
+    // Create current raw EDF
     let path_str = edf_path.as_str();
 
     let toml_content = match load(path_str) {
@@ -518,194 +600,80 @@ fn render_inner_loop(
         }
     };
 
-    let mut e: RawEDF = toml_value;
-    let mut ei = None;
+    let mut cur_redf: RawEDF = toml_value;
 
-    if e.base_environment.is_some() {
-        let be = e.base_environment.clone().unwrap();
+    // Merge base EDFs 
+    if cur_redf.base_environment.is_some() {
+        let mut base_redf = RawEDF::default();
 
+        let be = cur_redf.base_environment.clone().unwrap();
         let ba = match be {
             BaseEnvironment::TypeString(s) => vec![s],
             BaseEnvironment::TypeVec(a) => a,
         };
 
         for b in ba.iter() {
-            ei = Some(render_inner_loop(
+            let _base_redf= render_inner_loop(
                 b.to_string(),
-                oedf,
                 &sp,
                 env,
                 count,
                 max,
-            )?);
+            )?;
+            base_redf.extend(_base_redf);
         }
-        e.base_environment = None;
+        cur_redf.base_environment = None;
+
+        base_redf.extend(cur_redf);
+        cur_redf = base_redf;
     }
 
-    if ei.is_some() {
-        let i = ei.unwrap();
+    // Expand variables in the fields
+    if cur_redf.devices.is_some() {
+        cur_redf.devices = Some(expand_vars_vec(cur_redf.devices.unwrap(), env)?);
 
-        match i.annotations {
-            Some(a) => match e.annotations {
-                Some(b) => {
-                    let mut a1 = annotations_as_hashmap(a);
-                    let b1 = annotations_as_hashmap(b);
-                    a1.extend(b1.clone());
-                    a1 = expand_vars_hashmap(a1, env)?;
-                    e.annotations = Some(Annotations::TypeHashMap(a1));
-                }
-                None => {
-                    let mut a1 = annotations_as_hashmap(a);
-                    a1 = expand_vars_hashmap(a1, env)?;
-                    e.annotations = Some(Annotations::TypeHashMap(a1));
-                }
-            },
-            None => (),
-        }
-        match i.devices {
-            Some(mut a) => match e.devices {
-                Some(b) => {
-                    a.extend(b);
-                    e.devices = Some(a);
-                }
-                None => {
-                    e.devices = Some(a);
-                }
-            },
-            None => (),
-        }
-        if i.entrypoint.is_some() {
-            if e.entrypoint.is_none() {
-                e.entrypoint = i.entrypoint;
-            }
-        }
-        match i.env {
-            Some(mut a) => match e.env {
-                Some(ref mut b) => {
-                    a.extend(b.clone());
-                    e.env = Some(a);
-                }
-                None => {
-                    e.env = Some(a);
-                }
-            },
-            None => (),
-        }
-        if i.image.is_some() {
-            if e.image.is_none() {
-                e.image = i.image;
-            }
-        }
-        match i.mounts {
-            Some(mut a) => match e.mounts {
-                Some(ref mut b) => {
-                    a.append(b);
-                    e.mounts = Some(a);
-                }
-                None => {
-                    e.mounts = Some(a);
-                }
-            },
-            None => (),
-        }
-        if i.parallax_enable.is_some() {
-            if e.parallax_enable.is_none() {
-                e.parallax_enable = i.parallax_enable;
-            }
-        }
-        if i.parallax_imagestore.is_some() {
-            if e.parallax_imagestore.is_none() {
-                e.parallax_imagestore = i.parallax_imagestore;
-            }
-        }
-        if i.parallax_mount_program.is_some() {
-            if e.parallax_mount_program.is_none() {
-                e.parallax_mount_program = i.parallax_mount_program;
-            }
-        }
-        if i.parallax_path.is_some() {
-            if e.parallax_path.is_none() {
-                e.parallax_path = i.parallax_path;
-            }
-        }
-        if i.perfmon.is_some() {
-            if e.perfmon.is_none() {
-                e.perfmon = i.perfmon;
-            }
-        }
-        if i.podman_module.is_some() {
-            if e.podman_module.is_none() {
-                e.podman_module = i.podman_module;
-            }
-        }
-        if i.podman_path.is_some() {
-            if e.podman_path.is_none() {
-                e.podman_path = i.podman_path;
-            }
-        }
-        if i.podman_tmp_path.is_some() {
-            if e.podman_tmp_path.is_none() {
-                e.podman_tmp_path = i.podman_tmp_path;
-            }
-        }
-        if i.workdir.is_some() {
-            if e.workdir.is_none() {
-                e.workdir = i.workdir;
-            }
-        }
-        if i.writable.is_some() {
-            if e.writable.is_none() {
-                e.writable = i.writable;
-            }
-        }
-    }
-
-    if e.devices.is_some() {
-        // Expand variables
-        e.devices = Some(expand_vars_vec(e.devices.unwrap(), env)?);
-
-        //Remove duplicates from devices
-        let dev = e.devices.clone().unwrap();
+        // Remove duplicates from devices
+        let dev = cur_redf.devices.clone().unwrap();
         let dev_set: HashSet<_> = dev.into_iter().collect();
         let dev_unique_vec: Vec<_> = dev_set.into_iter().collect();
-        e.devices = Some(dev_unique_vec);
+        cur_redf.devices = Some(dev_unique_vec);
     }
-    if e.env.is_some() {
-        e.env = Some(expand_vars_hashmap(e.env.unwrap(), env)?);
+    if cur_redf.env.is_some() {
+        cur_redf.env = Some(expand_vars_hashmap(cur_redf.env.unwrap(), env)?);
     }
-    if e.annotations.is_some() {
-        let a = e.annotations.unwrap();
+    if cur_redf.annotations.is_some() {
+        let a = cur_redf.annotations.unwrap();
         let mut h = annotations_as_hashmap(a);
         h = expand_vars_hashmap(h, env)?;
-        e.annotations = Some(Annotations::TypeHashMap(h));
+        cur_redf.annotations = Some(Annotations::TypeHashMap(h));
     }
-    if e.engine.is_some() {
-        e.engine = Some(expand_vars_string(e.engine.unwrap(), env)?);
+    if cur_redf.engine.is_some() {
+        cur_redf.engine = Some(expand_vars_string(cur_redf.engine.unwrap(), env)?);
     }
-    if e.parallax_imagestore.is_some() {
-        e.parallax_imagestore = Some(expand_vars_string(e.parallax_imagestore.unwrap(), env)?);
+    if cur_redf.parallax_imagestore.is_some() {
+        cur_redf.parallax_imagestore = Some(expand_vars_string(cur_redf.parallax_imagestore.unwrap(), env)?);
     }
-    if e.parallax_path.is_some() {
-        e.parallax_path = Some(expand_vars_string(e.parallax_path.unwrap(), env)?);
+    if cur_redf.parallax_path.is_some() {
+        cur_redf.parallax_path = Some(expand_vars_string(cur_redf.parallax_path.unwrap(), env)?);
     }
-    if e.parallax_mount_program.is_some() {
-        e.parallax_mount_program =
-            Some(expand_vars_string(e.parallax_mount_program.unwrap(), env)?);
+    if cur_redf.parallax_mount_program.is_some() {
+        cur_redf.parallax_mount_program =
+            Some(expand_vars_string(cur_redf.parallax_mount_program.unwrap(), env)?);
     }
-    if e.podman_module.is_some() {
-        e.podman_module = Some(expand_vars_string(e.podman_module.unwrap(), env)?);
+    if cur_redf.podman_module.is_some() {
+        cur_redf.podman_module = Some(expand_vars_string(cur_redf.podman_module.unwrap(), env)?);
     }
-    if e.podman_path.is_some() {
-        e.podman_path = Some(expand_vars_string(e.podman_path.unwrap(), env)?);
+    if cur_redf.podman_path.is_some() {
+        cur_redf.podman_path = Some(expand_vars_string(cur_redf.podman_path.unwrap(), env)?);
     }
-    if e.podman_tmp_path.is_some() {
-        e.podman_tmp_path = Some(expand_vars_string(e.podman_tmp_path.unwrap(), env)?);
+    if cur_redf.podman_tmp_path.is_some() {
+        cur_redf.podman_tmp_path = Some(expand_vars_string(cur_redf.podman_tmp_path.unwrap(), env)?);
     }
-    if e.workdir.is_some() {
-        e.workdir = Some(expand_vars_string(e.workdir.unwrap(), env)?);
+    if cur_redf.workdir.is_some() {
+        cur_redf.workdir = Some(expand_vars_string(cur_redf.workdir.unwrap(), env)?);
     }
 
-    return Ok(e);
+    return Ok(cur_redf);
 }
 
 pub fn render_from_search_paths(
@@ -716,7 +684,7 @@ pub fn render_from_search_paths(
     let sp = search_paths;
     let max_levels = 10;
     let loop_count = 0;
-    let raw = render_inner_loop(path, None, &sp, env, loop_count, max_levels)?;
+    let raw = render_inner_loop(path, &sp, env, loop_count, max_levels)?;
     //let e = EDF::try_from(raw, env)?;
     let e = edf_from_raw(raw, env)?;
     Ok(e)
@@ -730,36 +698,168 @@ pub fn render(path: String) -> SarusResult<EDF> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use serial_test::serial;
 
-    #[test]
-    fn good_toml() {
-        // Loop through all toml files containing "good" in their name
-        let good_filepaths = std::fs::read_dir("src/toml").unwrap();
-        for fr in good_filepaths {
-            let fpath = fr.unwrap().path();
-            let fname = fpath
-                .file_name()
-                .unwrap()
-                .to_os_string()
-                .into_string()
-                .unwrap();
-            if fname.contains("good") {
-                let fstr = fpath.into_os_string().into_string().unwrap();
-                let r = render(fstr);
-                assert!(r.is_ok());
-            }
-        }
+    fn get_rendered_edf(_edf_filename: &str) -> SarusResult<EDF> {
+        let edf_filename = _edf_filename.to_string();
+        let old_cwd = match env::current_dir() {
+            Ok(_p) => _p,
+            Err(_) => panic!("cannot find current working directory")
+        };
+
+        match env::set_current_dir(Path::new("src/toml")) {
+            Ok(_) => (),
+            Err(_) => panic!("cannot change working directory, cwd: {}", old_cwd.display())
+        };
+
+        let result = render(edf_filename.clone());
+
+        match env::set_current_dir(old_cwd) {
+            Ok(_) => (),
+            Err(_) => panic!("cannot restore working directory")
+        };
+
+        return result;
     }
 
     #[test]
-    fn file_not_found() {
+    #[serial]
+    fn render_top_simple() {
+        let edf = get_rendered_edf("top-simple-1.toml").unwrap();
+        assert!(edf.image == "ubuntu:simple-1");
+        assert!(edf.entrypoint == true);
+    }
+
+    #[test]
+    #[serial]
+    fn render_top_devices() {
+        let edf = get_rendered_edf("top-devices.toml").unwrap();
+        assert!(edf.image == "ubuntu:devices");
+        assert!(edf.devices.contains(&"dev1".to_string()));
+        assert!(edf.devices.contains(&"dev2".to_string()));
+        assert!(edf.devices.contains(&"dev3".to_string()));
+        assert!(edf.devices.len() == 3);
+    }
+
+    #[test]
+    #[serial]
+    fn render_top_mounts() {
+        let edf = get_rendered_edf("top-mounts.toml").unwrap();
+        assert!(edf.image == "ubuntu:mounts");
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/aaa:/bbb"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./ccc:./ddd"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/eee:./fff:ggg"));
+        assert!(edf.mounts.len() == 3);
+    }
+
+    #[test]
+    #[serial]
+    fn render_table_anno() {
+        let edf = get_rendered_edf("table-anno.toml").unwrap();
+        assert!(edf.image == "ubuntu:anno");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "three");
+        assert!(edf.annotations.get("quick").unwrap() == "maths");
+    }
+
+    #[test]
+    #[serial]
+    fn render_table_env() {
+        let edf = get_rendered_edf("table-env.toml").unwrap();
+        assert!(edf.image == "ubuntu:env");
+        assert!(edf.env.get("two_plus_two").unwrap() == "four");
+        assert!(edf.env.get("minus_one").unwrap() == "three");
+        assert!(edf.env.get("quick").unwrap() == "maths");
+    }
+
+    #[test]
+    #[serial]
+    fn render_base_single() {
+        let edf = get_rendered_edf("base-single.toml").unwrap();
+        assert!(edf.image == "ubuntu:anno");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "three");
+        assert!(edf.annotations.get("quick").unwrap() == "algebra");
+    }
+
+    #[test]
+    #[serial]
+    fn render_base_multi_1() {
+        let edf = get_rendered_edf("base-multi-1.toml").unwrap();
+        assert!(edf.image == "ubuntu:simple-1");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "three");
+        assert!(edf.annotations.get("quick").unwrap() == "algebra");
+    }
+
+    #[test]
+    #[serial]
+    fn render_base_multi_2() {
+        let edf = get_rendered_edf("base-multi-2.toml").unwrap();
+        assert!(edf.image == "ubuntu:multi-2");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "three");
+        assert!(edf.annotations.get("quick").unwrap() == "algebra");
+        assert!(edf.env.get("two_plus_two").unwrap() == "four");
+        assert!(edf.env.get("minus_one").unwrap() == "three");
+        assert!(edf.env.get("quick").unwrap() == "counting");
+    }
+
+    #[test]
+    #[serial]
+    fn render_base_multi_vecs() {
+        let edf = get_rendered_edf("base-multi-vecs.toml").unwrap();
+        assert!(edf.image == "ubuntu:vecs");
+        assert!(edf.devices.contains(&"dev1".to_string()));
+        assert!(edf.devices.contains(&"dev2".to_string()));
+        assert!(edf.devices.contains(&"dev3".to_string()));
+        assert!(edf.devices.contains(&"dev4".to_string()));
+        assert!(edf.devices.contains(&"dev5".to_string()));
+        assert!(edf.devices.len() == 5);
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/aaa:/bbb"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./ccc:./ddd"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/eee:./fff:ggg"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/hhh:/iii"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./jjj:./kkk"));
+        assert!(edf.mounts.len() == 5);
+    }
+
+    #[test]
+    #[serial]
+    fn render_base_rec() {
+        assert!(get_rendered_edf("base-rec.toml").is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn render_base_nested() {
+        let edf = get_rendered_edf("base-nested.toml").unwrap();
+        assert!(edf.image == "ubuntu:anno");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "hot");
+        assert!(edf.annotations.get("quick").unwrap() == "algebra");
+    }
+
+    #[test]
+    #[serial]
+    fn render_base_prio() {
+        let edf = get_rendered_edf("base-prio.toml").unwrap();
+        assert!(edf.image == "ubuntu:simple-1");
+        assert!(edf.entrypoint == true);
+    }
+
+    #[test]
+    #[serial]
+    fn render_file_not_found() {
         let result = render(String::from("src/toml/not_found.toml"));
         assert!(result.is_err());
     }
 
     #[test]
-    fn not_a_toml_file() {
-        let result = render(String::from("src/toml/test.txt"));
+    #[serial]
+    fn render_not_a_toml_file() {
+        let result = render(String::from("src/toml/plain.txt"));
         assert!(result.is_err());
     }
 }
