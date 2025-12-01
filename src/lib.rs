@@ -101,7 +101,7 @@ impl RawEDF {
 
             let mut self_anno_hm = match &self.annotations {
                 Some(self_anno) => annotations_as_hashmap(self_anno.clone()),
-                None => HashMap::new(),
+                None => HashMap::new()
             };
             let i_anno_hm = annotations_as_hashmap(i_anno);
             self_anno_hm.extend(i_anno_hm.clone());
@@ -603,7 +603,7 @@ fn render_inner_loop(
 
     let mut cur_redf: RawEDF = toml_value;
 
-    // Merge base EDFs
+    // Merge base EDFs 
     if cur_redf.base_environment.is_some() {
         let mut base_redf = RawEDF::default();
 
@@ -614,7 +614,14 @@ fn render_inner_loop(
         };
 
         for b in ba.iter() {
-            let _base_redf = render_inner_loop(b.to_string(), oedf, &sp, env, count, max)?;
+            let _base_redf= render_inner_loop(
+                b.to_string(),
+                oedf,
+                &sp,
+                env,
+                count,
+                max,
+            )?;
             println!("{} {}", b, _base_redf.image.clone().unwrap());
             base_redf.extend(_base_redf);
         }
@@ -647,19 +654,14 @@ fn render_inner_loop(
         cur_redf.engine = Some(expand_vars_string(cur_redf.engine.unwrap(), env)?);
     }
     if cur_redf.parallax_imagestore.is_some() {
-        cur_redf.parallax_imagestore = Some(expand_vars_string(
-            cur_redf.parallax_imagestore.unwrap(),
-            env,
-        )?);
+        cur_redf.parallax_imagestore = Some(expand_vars_string(cur_redf.parallax_imagestore.unwrap(), env)?);
     }
     if cur_redf.parallax_path.is_some() {
         cur_redf.parallax_path = Some(expand_vars_string(cur_redf.parallax_path.unwrap(), env)?);
     }
     if cur_redf.parallax_mount_program.is_some() {
-        cur_redf.parallax_mount_program = Some(expand_vars_string(
-            cur_redf.parallax_mount_program.unwrap(),
-            env,
-        )?);
+        cur_redf.parallax_mount_program =
+            Some(expand_vars_string(cur_redf.parallax_mount_program.unwrap(), env)?);
     }
     if cur_redf.podman_module.is_some() {
         cur_redf.podman_module = Some(expand_vars_string(cur_redf.podman_module.unwrap(), env)?);
@@ -668,8 +670,7 @@ fn render_inner_loop(
         cur_redf.podman_path = Some(expand_vars_string(cur_redf.podman_path.unwrap(), env)?);
     }
     if cur_redf.podman_tmp_path.is_some() {
-        cur_redf.podman_tmp_path =
-            Some(expand_vars_string(cur_redf.podman_tmp_path.unwrap(), env)?);
+        cur_redf.podman_tmp_path = Some(expand_vars_string(cur_redf.podman_tmp_path.unwrap(), env)?);
     }
     if cur_redf.workdir.is_some() {
         cur_redf.workdir = Some(expand_vars_string(cur_redf.workdir.unwrap(), env)?);
@@ -701,53 +702,32 @@ pub fn render(path: String) -> SarusResult<EDF> {
 mod tests {
     use super::*;
     use std::env;
+    use serial_test::serial;
 
     fn get_rendered_edf(_edf_filename: &str) -> SarusResult<EDF> {
         let edf_filename = _edf_filename.to_string();
         let old_cwd = match env::current_dir() {
             Ok(_p) => _p,
-            Err(_) => panic!("cannot find current working directory"),
+            Err(_) => panic!("cannot find current working directory")
         };
 
         match env::set_current_dir(Path::new("src/toml")) {
             Ok(_) => (),
-            Err(_) => panic!(
-                "cannot change working directory, cwd: {}",
-                old_cwd.display()
-            ),
+            Err(_) => panic!("cannot change working directory, cwd: {}", old_cwd.display())
         };
 
         let result = render(edf_filename.clone());
 
         match env::set_current_dir(old_cwd) {
             Ok(_) => (),
-            Err(_) => panic!("cannot restore working directory"),
+            Err(_) => panic!("cannot restore working directory")
         };
 
         return result;
     }
 
     #[test]
-    fn good_toml() {
-        // Loop through all toml files containing "good" in their name
-        let good_filepaths = std::fs::read_dir("src/toml").unwrap();
-        for fr in good_filepaths {
-            let fpath = fr.unwrap().path();
-            let fname = fpath
-                .file_name()
-                .unwrap()
-                .to_os_string()
-                .into_string()
-                .unwrap();
-            if fname.contains("good") {
-                let fstr = fpath.into_os_string().into_string().unwrap();
-                let r = render(fstr);
-                assert!(r.is_ok());
-            }
-        }
-    }
-
-    #[test]
+    #[serial]
     fn render_table_anno() {
         let edf = get_rendered_edf("table-anno.toml").unwrap();
         assert!(edf.image == "ubuntu:anno");
@@ -757,6 +737,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn render_table_env() {
         let edf = get_rendered_edf("table-env.toml").unwrap();
         assert!(edf.image == "ubuntu:env");
@@ -766,6 +747,15 @@ mod tests {
     }
 
     #[test]
+    #[serial]
+    fn render_top_simple() {
+        let edf = get_rendered_edf("top-simple-1.toml").unwrap();
+        assert!(edf.image == "ubuntu:simple-1");
+        assert!(edf.entrypoint == true);
+    }
+
+    #[test]
+    #[serial]
     fn render_base_single() {
         let edf = get_rendered_edf("base-single.toml").unwrap();
         assert!(edf.image == "ubuntu:anno");
@@ -775,6 +765,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn render_base_multi_1() {
         let edf = get_rendered_edf("base-multi-1.toml").unwrap();
         assert!(edf.image == "ubuntu:simple-1");
@@ -784,6 +775,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn render_base_multi_2() {
         let edf = get_rendered_edf("base-multi-2.toml").unwrap();
         assert!(edf.image == "ubuntu:multi-2");
@@ -796,11 +788,13 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn render_base_rec() {
         assert!(get_rendered_edf("base-rec.toml").is_err());
     }
 
     #[test]
+    #[serial]
     fn render_base_nested() {
         let edf = get_rendered_edf("base-nested.toml").unwrap();
         assert!(edf.image == "ubuntu:anno");
@@ -810,6 +804,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn render_base_prio() {
         let edf = get_rendered_edf("base-prio.toml").unwrap();
         assert!(edf.image == "ubuntu:simple-1");
@@ -817,14 +812,38 @@ mod tests {
     }
 
     #[test]
+    #[serial]
+    fn render_top_devices() {
+        let edf = get_rendered_edf("top-devices.toml").unwrap();
+        assert!(edf.image == "ubuntu:devices");
+        assert!(edf.devices.contains(&"dev1".to_string()));
+        assert!(edf.devices.contains(&"dev2".to_string()));
+        assert!(edf.devices.contains(&"dev3".to_string()));
+        assert!(edf.devices.len() == 3);
+    }
+
+    #[test]
+    #[serial]
+    fn render_top_mounts() {
+        let edf = get_rendered_edf("top-mounts.toml").unwrap();
+        assert!(edf.image == "ubuntu:mounts");
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/aaa:/bbb"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./ccc:./ddd"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/eee:./fff:ggg"));
+        assert!(edf.mounts.len() == 3);
+    }
+
+    #[test]
+    #[serial]
     fn render_file_not_found() {
         let result = render(String::from("src/toml/not_found.toml"));
         assert!(result.is_err());
     }
 
     #[test]
+    #[serial]
     fn render_not_a_toml_file() {
-        let result = render(String::from("src/toml/test.txt"));
+        let result = render(String::from("src/toml/plain.txt"));
         assert!(result.is_err());
     }
 }
