@@ -824,7 +824,7 @@ mod tests {
 
     #[test]
     fn render_not_a_toml_file() {
-        let result = render(String::from("src/toml/plain.txt"));
+        let result = render(String::from("src/toml/test.txt"));
         assert!(result.is_err());
     }
 }
