@@ -94,120 +94,84 @@ pub enum Annotations {
 }
 
 impl RawEDF {
-    // Give priority to self's fields.
-    fn merge(&mut self, i: RawEDF) {
-        match i.annotations {
-            Some(a) => match &self.annotations {
-                Some(b) => {
-                    let mut a1 = annotations_as_hashmap(a);
-                    let b1 = annotations_as_hashmap(b.clone());
-                    a1.extend(b1.clone());
-                    //a1 = expand_vars_hashmap(a1, env)?;
-                    self.annotations = Some(Annotations::TypeHashMap(a1));
-                }
-                None => {
-                    let a1 = annotations_as_hashmap(a);
-                    //a1 = expand_vars_hashmap(a1, env)?;
-                    self.annotations = Some(Annotations::TypeHashMap(a1));
-                }
-            },
-            None => (),
+    // Overwrite fields and tables with the other raw EDF.
+    fn extend(&mut self, i: RawEDF) {
+        if i.annotations.is_some() {
+            let i_anno = i.annotations.unwrap();
+
+            let mut self_anno_hm = match &self.annotations {
+                Some(self_anno) => annotations_as_hashmap(self_anno.clone()),
+                None => HashMap::new()
+            };
+            let i_anno_hm = annotations_as_hashmap(i_anno);
+            self_anno_hm.extend(i_anno_hm.clone());
+
+            self.annotations = Some(Annotations::TypeHashMap(self_anno_hm));
         }
-        match i.devices {
-            Some(mut a) => match &self.devices {
-                Some(b) => {
-                    a.extend(b.clone());
-                    self.devices = Some(a);
-                }
-                None => {
-                    self.devices = Some(a);
-                }
-            },
-            None => (),
-        }
-        if i.entrypoint.is_some() {
-            if self.entrypoint.is_none() {
-                self.entrypoint = i.entrypoint;
+
+        if i.devices.is_some() {
+            if self.devices.is_some() {
+                let i_devices = i.devices.unwrap();
+                let self_devices = self.devices.as_mut().unwrap();
+                self_devices.extend(i_devices);
+            } else {
+                self.devices = i.devices;
             }
         }
-        match i.env {
-            Some(mut a) => match self.env {
-                Some(ref mut b) => {
-                    a.extend(b.clone());
-                    self.env = Some(a);
-                }
-                None => {
-                    self.env = Some(a);
-                }
-            },
-            None => (),
+        if i.env.is_some() {
+            if self.env.is_some() {
+                let i_env = i.env.unwrap();
+                let self_env = self.env.as_mut().unwrap();
+                self_env.extend(i_env);
+            } else {
+                self.env = i.env;
+            }
+        }
+        if i.mounts.is_some() {
+            if self.mounts.is_some() {
+                let i_mounts = i.mounts.unwrap();
+                let self_mounts = self.mounts.as_mut().unwrap();
+                self_mounts.extend(i_mounts);
+            } else {
+                self.mounts = i.mounts;
+            }
+        }
+
+        if i.entrypoint.is_some() {
+            self.entrypoint = i.entrypoint;
         }
         if i.image.is_some() {
-            if self.image.is_none() {
-                self.image = i.image;
-            }
-        }
-        match i.mounts {
-            Some(mut a) => match self.mounts {
-                Some(ref mut b) => {
-                    a.append(b);
-                    self.mounts = Some(a);
-                }
-                None => {
-                    self.mounts = Some(a);
-                }
-            },
-            None => (),
+            self.image = i.image;
         }
         if i.parallax_enable.is_some() {
-            if self.parallax_enable.is_none() {
-                self.parallax_enable = i.parallax_enable;
-            }
+            self.parallax_enable = i.parallax_enable;
         }
         if i.parallax_imagestore.is_some() {
-            if self.parallax_imagestore.is_none() {
-                self.parallax_imagestore = i.parallax_imagestore;
-            }
+            self.parallax_imagestore = i.parallax_imagestore;
         }
         if i.parallax_mount_program.is_some() {
-            if self.parallax_mount_program.is_none() {
-                self.parallax_mount_program = i.parallax_mount_program;
-            }
+            self.parallax_mount_program = i.parallax_mount_program;
         }
         if i.parallax_path.is_some() {
-            if self.parallax_path.is_none() {
-                self.parallax_path = i.parallax_path;
-            }
+            self.parallax_path = i.parallax_path;
         }
         if i.perfmon.is_some() {
-            if self.perfmon.is_none() {
-                self.perfmon = i.perfmon;
-            }
+            self.perfmon = i.perfmon;
         }
         if i.podman_module.is_some() {
-            if self.podman_module.is_none() {
-                self.podman_module = i.podman_module;
-            }
+            self.podman_module = i.podman_module;
         }
         if i.podman_path.is_some() {
-            if self.podman_path.is_none() {
-                self.podman_path = i.podman_path;
-            }
+            self.podman_path = i.podman_path;
         }
         if i.podman_tmp_path.is_some() {
-            if self.podman_tmp_path.is_none() {
-                self.podman_tmp_path = i.podman_tmp_path;
-            }
+            self.podman_tmp_path = i.podman_tmp_path;
         }
         if i.workdir.is_some() {
-            if self.workdir.is_none() {
-                self.workdir = i.workdir;
-            }
+            self.workdir = i.workdir;
         }
         if i.writable.is_some() {
-            if self.writable.is_none() {
-                self.writable = i.writable;
-            }
+            self.writable = i.writable;
         }
     }
 }
@@ -650,7 +614,7 @@ fn render_inner_loop(
         };
 
         for b in ba.iter() {
-            let mut _base_redf= render_inner_loop(
+            let _base_redf= render_inner_loop(
                 b.to_string(),
                 oedf,
                 &sp,
@@ -659,12 +623,12 @@ fn render_inner_loop(
                 max,
             )?;
             println!("{} {}", b, _base_redf.image.clone().unwrap());
-            _base_redf.merge(base_redf);
-            base_redf = _base_redf;
+            base_redf.extend(_base_redf);
         }
         cur_redf.base_environment = None;
 
-        cur_redf.merge(base_redf);
+        base_redf.extend(cur_redf);
+        cur_redf = base_redf;
     }
 
     // Expand variables in the fields
@@ -739,7 +703,28 @@ mod tests {
     use super::*;
     use std::env;
 
-    /*
+    fn get_rendered_edf(_edf_filename: &str) -> SarusResult<EDF> {
+        let edf_filename = _edf_filename.to_string();
+        let old_cwd = match env::current_dir() {
+            Ok(_p) => _p,
+            Err(_) => panic!("cannot find current working directory")
+        };
+
+        match env::set_current_dir(Path::new("src/toml")) {
+            Ok(_) => (),
+            Err(_) => panic!("cannot change working directory, cwd: {}", old_cwd.display())
+        };
+
+        let result = render(edf_filename.clone());
+
+        match env::set_current_dir(old_cwd) {
+            Ok(_) => (),
+            Err(_) => panic!("cannot restore working directory")
+        };
+
+        return result;
+    }
+
     #[test]
     fn good_toml() {
         // Loop through all toml files containing "good" in their name
@@ -759,37 +744,29 @@ mod tests {
             }
         }
     }
-    */
 
-    fn get_rendered_edf(_edf_filename: &str) -> EDF {
-        let edf_filename = _edf_filename.to_string();
-        let old_cwd = match env::current_dir() {
-            Ok(_p) => _p,
-            Err(_) => panic!("cannot find current working directory")
-        };
+    #[test]
+    fn render_table_anno() {
+        let edf = get_rendered_edf("table-anno.toml").unwrap();
+        assert!(edf.image == "ubuntu:anno");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "three");
+        assert!(edf.annotations.get("quick").unwrap() == "maths");
+    }
 
-        match env::set_current_dir(Path::new("src/toml")) {
-            Ok(_) => (),
-            Err(_) => panic!("cannot change working directory, cwd: {}", old_cwd.display())
-        };
-
-        let result = match render(edf_filename.clone()) {
-            Ok(edf) => edf,
-            Err(e) => panic!("cannot render EDF: {}", e.msg)
-        };
-
-        match env::set_current_dir(old_cwd) {
-            Ok(_) => (),
-            Err(_) => panic!("cannot restore working directory")
-        };
-
-        return result;
+    #[test]
+    fn render_table_env() {
+        let edf = get_rendered_edf("table-env.toml").unwrap();
+        assert!(edf.image == "ubuntu:env");
+        assert!(edf.env.get("two_plus_two").unwrap() == "four");
+        assert!(edf.env.get("minus_one").unwrap() == "three");
+        assert!(edf.env.get("quick").unwrap() == "maths");
     }
 
     #[test]
     fn render_base_single() {
-        let edf = get_rendered_edf("base-single.toml");
-        assert!(edf.image == "alpine");
+        let edf = get_rendered_edf("base-single.toml").unwrap();
+        assert!(edf.image == "ubuntu:anno");
         assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
         assert!(edf.annotations.get("minus_one").unwrap() == "three");
         assert!(edf.annotations.get("quick").unwrap() == "algebra");
@@ -797,22 +774,54 @@ mod tests {
 
     #[test]
     fn render_base_multi_1() {
-        let edf = get_rendered_edf("base-multi-1.toml");
-        print!("{}", edf.image);
-        assert!(edf.image == "ubuntu");
+        let edf = get_rendered_edf("base-multi-1.toml").unwrap();
+        assert!(edf.image == "ubuntu:simple-1");
         assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
         assert!(edf.annotations.get("minus_one").unwrap() == "three");
         assert!(edf.annotations.get("quick").unwrap() == "algebra");
     }
 
     #[test]
-    fn file_not_found() {
+    fn render_base_multi_2() {
+        let edf = get_rendered_edf("base-multi-2.toml").unwrap();
+        assert!(edf.image == "ubuntu:multi-2");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "three");
+        assert!(edf.annotations.get("quick").unwrap() == "algebra");
+        assert!(edf.env.get("two_plus_two").unwrap() == "four");
+        assert!(edf.env.get("minus_one").unwrap() == "three");
+        assert!(edf.env.get("quick").unwrap() == "counting");
+    }
+
+    #[test]
+    fn render_base_rec() {
+        assert!(get_rendered_edf("base-rec.toml").is_err());
+    }
+
+    #[test]
+    fn render_base_nested() {
+        let edf = get_rendered_edf("base-nested.toml").unwrap();
+        assert!(edf.image == "ubuntu:anno");
+        assert!(edf.annotations.get("two_plus_two").unwrap() == "four");
+        assert!(edf.annotations.get("minus_one").unwrap() == "hot");
+        assert!(edf.annotations.get("quick").unwrap() == "algebra");
+    }
+
+    #[test]
+    fn render_base_prio() {
+        let edf = get_rendered_edf("base-prio.toml").unwrap();
+        assert!(edf.image == "ubuntu:simple-1");
+        assert!(edf.entrypoint == true);
+    }
+
+    #[test]
+    fn render_file_not_found() {
         let result = render(String::from("src/toml/not_found.toml"));
         assert!(result.is_err());
     }
 
     #[test]
-    fn not_a_toml_file() {
+    fn render_not_a_toml_file() {
         let result = render(String::from("src/toml/plain.txt"));
         assert!(result.is_err());
     }

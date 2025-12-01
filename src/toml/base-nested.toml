@@ -1,4 +1,4 @@
-base_environment = "./baseenv-single.toml"
+base_environment = "./base-single.toml"
 
-[anno]
-quick = "counting"
+[annotations]
+minus_one = "hot"

@@ -1,1 +1,2 @@
-mounts = [ "aaa", "bbb:ccc", "ddd:eee:fff" ]
+image = "ubuntu:mounts"
+mounts = [ "/aaa:/bbb", "./ccc:./ddd", "/eee:./fff:ggg" ]

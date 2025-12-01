@@ -1,6 +1,6 @@
-image = "alpine"
+image = "ubuntu:env"
 
-[annotations]
+[env]
 two_plus_two = "four"
 minus_one = "three"
 quick = "maths"

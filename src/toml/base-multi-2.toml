@@ -1,7 +1,7 @@
-base_environment = [ "./anno.toml", "./top-simple.toml", "./env.toml" ]
-image = "fedora"
+base_environment = [ "./table-anno.toml", "./top-simple-1.toml", "./table-env.toml" ]
+image = "ubuntu:multi-2"
 
-[anno]
+[annotations]
 quick = "algebra"
 
 [env]
