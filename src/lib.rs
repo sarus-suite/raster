@@ -556,7 +556,6 @@ fn resolve_env_path(
 
 fn render_inner_loop(
     name: String,
-    oedf: Option<&RawEDF>,
     sp: &Vec<String>,
     env: &Option<HashMap<String, String>>,
     mut count: u64,
@@ -616,7 +615,6 @@ fn render_inner_loop(
         for b in ba.iter() {
             let _base_redf= render_inner_loop(
                 b.to_string(),
-                oedf,
                 &sp,
                 env,
                 count,
@@ -687,7 +685,7 @@ pub fn render_from_search_paths(
     let sp = search_paths;
     let max_levels = 10;
     let loop_count = 0;
-    let raw = render_inner_loop(path, None, &sp, env, loop_count, max_levels)?;
+    let raw = render_inner_loop(path, &sp, env, loop_count, max_levels)?;
     //let e = EDF::try_from(raw, env)?;
     let e = edf_from_raw(raw, env)?;
     Ok(e)
