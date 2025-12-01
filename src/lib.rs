@@ -620,7 +620,6 @@ fn render_inner_loop(
                 count,
                 max,
             )?;
-            println!("{} {}", b, _base_redf.image.clone().unwrap());
             base_redf.extend(_base_redf);
         }
         cur_redf.base_environment = None;
