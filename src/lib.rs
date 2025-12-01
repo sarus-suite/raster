@@ -728,6 +728,36 @@ mod tests {
 
     #[test]
     #[serial]
+    fn render_top_simple() {
+        let edf = get_rendered_edf("top-simple-1.toml").unwrap();
+        assert!(edf.image == "ubuntu:simple-1");
+        assert!(edf.entrypoint == true);
+    }
+
+    #[test]
+    #[serial]
+    fn render_top_devices() {
+        let edf = get_rendered_edf("top-devices.toml").unwrap();
+        assert!(edf.image == "ubuntu:devices");
+        assert!(edf.devices.contains(&"dev1".to_string()));
+        assert!(edf.devices.contains(&"dev2".to_string()));
+        assert!(edf.devices.contains(&"dev3".to_string()));
+        assert!(edf.devices.len() == 3);
+    }
+
+    #[test]
+    #[serial]
+    fn render_top_mounts() {
+        let edf = get_rendered_edf("top-mounts.toml").unwrap();
+        assert!(edf.image == "ubuntu:mounts");
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/aaa:/bbb"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./ccc:./ddd"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/eee:./fff:ggg"));
+        assert!(edf.mounts.len() == 3);
+    }
+
+    #[test]
+    #[serial]
     fn render_table_anno() {
         let edf = get_rendered_edf("table-anno.toml").unwrap();
         assert!(edf.image == "ubuntu:anno");
@@ -744,14 +774,6 @@ mod tests {
         assert!(edf.env.get("two_plus_two").unwrap() == "four");
         assert!(edf.env.get("minus_one").unwrap() == "three");
         assert!(edf.env.get("quick").unwrap() == "maths");
-    }
-
-    #[test]
-    #[serial]
-    fn render_top_simple() {
-        let edf = get_rendered_edf("top-simple-1.toml").unwrap();
-        assert!(edf.image == "ubuntu:simple-1");
-        assert!(edf.entrypoint == true);
     }
 
     #[test]
@@ -789,6 +811,25 @@ mod tests {
 
     #[test]
     #[serial]
+    fn render_base_multi_vecs() {
+        let edf = get_rendered_edf("base-multi-vecs.toml").unwrap();
+        assert!(edf.image == "ubuntu:vecs");
+        assert!(edf.devices.contains(&"dev1".to_string()));
+        assert!(edf.devices.contains(&"dev2".to_string()));
+        assert!(edf.devices.contains(&"dev3".to_string()));
+        assert!(edf.devices.contains(&"dev4".to_string()));
+        assert!(edf.devices.contains(&"dev5".to_string()));
+        assert!(edf.devices.len() == 5);
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/aaa:/bbb"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./ccc:./ddd"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/eee:./fff:ggg"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/hhh:/iii"));
+        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./jjj:./kkk"));
+        assert!(edf.mounts.len() == 5);
+    }
+
+    #[test]
+    #[serial]
     fn render_base_rec() {
         assert!(get_rendered_edf("base-rec.toml").is_err());
     }
@@ -809,28 +850,6 @@ mod tests {
         let edf = get_rendered_edf("base-prio.toml").unwrap();
         assert!(edf.image == "ubuntu:simple-1");
         assert!(edf.entrypoint == true);
-    }
-
-    #[test]
-    #[serial]
-    fn render_top_devices() {
-        let edf = get_rendered_edf("top-devices.toml").unwrap();
-        assert!(edf.image == "ubuntu:devices");
-        assert!(edf.devices.contains(&"dev1".to_string()));
-        assert!(edf.devices.contains(&"dev2".to_string()));
-        assert!(edf.devices.contains(&"dev3".to_string()));
-        assert!(edf.devices.len() == 3);
-    }
-
-    #[test]
-    #[serial]
-    fn render_top_mounts() {
-        let edf = get_rendered_edf("top-mounts.toml").unwrap();
-        assert!(edf.image == "ubuntu:mounts");
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/aaa:/bbb"));
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./ccc:./ddd"));
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/eee:./fff:ggg"));
-        assert!(edf.mounts.len() == 3);
     }
 
     #[test]
