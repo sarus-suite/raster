@@ -8,8 +8,7 @@ use std::path::Path;
 use toml::Value;
 use toml::map::Map;
 
-use crate::common::{expand_vars_hashmap, expand_vars_vec};
-use crate::config::load_config;
+use crate::common::{expand_vars_hashmap, expand_vars_string, expand_vars_vec};
 use crate::error::{SarusError, SarusResult};
 use crate::mount::{SarusMounts, sarus_mounts_from_strings};
 
@@ -18,7 +17,7 @@ pub mod config;
 pub mod error;
 pub mod mount;
 
-pub use crate::common::expand_vars_string;
+pub use crate::config::{load_config, load_config_path, update_config_by_user};
 
 #[allow(dead_code)]
 #[derive(Derivative, Serialize, Deserialize, Clone, Default)]
@@ -101,7 +100,7 @@ impl RawEDF {
 
             let mut self_anno_hm = match &self.annotations {
                 Some(self_anno) => annotations_as_hashmap(self_anno.clone()),
-                None => HashMap::new()
+                None => HashMap::new(),
             };
             let i_anno_hm = annotations_as_hashmap(i_anno);
             self_anno_hm.extend(i_anno_hm.clone());
@@ -353,20 +352,6 @@ fn load(file_path: &str) -> Result<String, Box<dyn Error>> {
     // SD-67022 - prevent reading wrong file
     let fp = Path::new(file_path);
 
-    let fname = match fp.file_name().and_then(OsStr::to_str) {
-        Some(name) => name,
-        None => return Err(format!("Cannot extract file name from {file_path}").into()),
-    };
-
-    let ext = match fp.extension().and_then(OsStr::to_str) {
-        Some(x) => x,
-        None => return Err(format!("Cannot extract file extension from {file_path}").into()),
-    };
-
-    if ext != "toml" {
-        return Err(format!("File name {fname} doesn't end with .toml").into());
-    }
-
     if !fp.exists() {
         return Err(format!("File {file_path} not found").into());
     }
@@ -376,11 +361,52 @@ fn load(file_path: &str) -> Result<String, Box<dyn Error>> {
     Ok(outstr)
 }
 
-pub fn validate(path: String) -> SarusResult<()> {
-    let path_str = path.as_str();
+pub(crate) fn check_file_path_extension(file_path: &str, ext: &str) -> SarusResult<()> {
+    let fp = Path::new(file_path);
 
+    let fname = match fp.file_name().and_then(OsStr::to_str) {
+        Some(name) => name,
+        None => {
+            return Err(SarusError {
+                code: 20,
+                file_path: Some(file_path.to_string()),
+                msg: String::from("Cannot extract file name"),
+            });
+        }
+    };
+
+    let cur_ext = match fp.extension().and_then(OsStr::to_str) {
+        Some(x) => x,
+        None => {
+            return Err(SarusError {
+                code: 21,
+                file_path: Some(file_path.to_string()),
+                msg: String::from("Cannot extract file extension"),
+            });
+        }
+    };
+
+    if cur_ext != ext {
+        return Err(SarusError {
+            code: 22,
+            file_path: Some(file_path.to_string()),
+            msg: format!("File name {fname} doesn't end with .{ext}"),
+        });
+    }
+    Ok(())
+}
+
+pub fn validate(path: String) -> SarusResult<()> {
     // Embedding schema file
     let schema_content = include_str!("schema/edf.json");
+
+    check_file_path_extension(&path, "toml")?;
+
+    validate_file(path, schema_content)
+}
+
+pub(crate) fn validate_file(path: String, schema_content: &str) -> SarusResult<()> {
+    let path_str = path.as_str();
 
     let schema: serde_json::Value = match serde_json::from_str(&schema_content) {
         Ok(c) => c,
@@ -602,7 +628,7 @@ fn render_inner_loop(
 
     let mut cur_redf: RawEDF = toml_value;
 
-    // Merge base EDFs 
+    // Merge base EDFs
     if cur_redf.base_environment.is_some() {
         let mut base_redf = RawEDF::default();
 
@@ -613,13 +639,7 @@ fn render_inner_loop(
         };
 
         for b in ba.iter() {
-            let _base_redf= render_inner_loop(
-                b.to_string(),
-                &sp,
-                env,
-                count,
-                max,
-            )?;
+            let _base_redf = render_inner_loop(b.to_string(), &sp, env, count, max)?;
             base_redf.extend(_base_redf);
         }
         cur_redf.base_environment = None;
@@ -651,14 +671,19 @@ fn render_inner_loop(
         cur_redf.engine = Some(expand_vars_string(cur_redf.engine.unwrap(), env)?);
     }
     if cur_redf.parallax_imagestore.is_some() {
-        cur_redf.parallax_imagestore = Some(expand_vars_string(cur_redf.parallax_imagestore.unwrap(), env)?);
+        cur_redf.parallax_imagestore = Some(expand_vars_string(
+            cur_redf.parallax_imagestore.unwrap(),
+            env,
+        )?);
     }
     if cur_redf.parallax_path.is_some() {
         cur_redf.parallax_path = Some(expand_vars_string(cur_redf.parallax_path.unwrap(), env)?);
     }
     if cur_redf.parallax_mount_program.is_some() {
-        cur_redf.parallax_mount_program =
-            Some(expand_vars_string(cur_redf.parallax_mount_program.unwrap(), env)?);
+        cur_redf.parallax_mount_program = Some(expand_vars_string(
+            cur_redf.parallax_mount_program.unwrap(),
+            env,
+        )?);
     }
     if cur_redf.podman_module.is_some() {
         cur_redf.podman_module = Some(expand_vars_string(cur_redf.podman_module.unwrap(), env)?);
@@ -667,7 +692,8 @@ fn render_inner_loop(
         cur_redf.podman_path = Some(expand_vars_string(cur_redf.podman_path.unwrap(), env)?);
     }
     if cur_redf.podman_tmp_path.is_some() {
-        cur_redf.podman_tmp_path = Some(expand_vars_string(cur_redf.podman_tmp_path.unwrap(), env)?);
+        cur_redf.podman_tmp_path =
+            Some(expand_vars_string(cur_redf.podman_tmp_path.unwrap(), env)?);
     }
     if cur_redf.workdir.is_some() {
         cur_redf.workdir = Some(expand_vars_string(cur_redf.workdir.unwrap(), env)?);
@@ -698,26 +724,29 @@ pub fn render(path: String) -> SarusResult<EDF> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
     use serial_test::serial;
+    use std::env;
 
-    fn get_rendered_edf(_edf_filename: &str) -> SarusResult<EDF> {
+    pub(crate) fn get_rendered_edf(_edf_filename: &str) -> SarusResult<EDF> {
         let edf_filename = _edf_filename.to_string();
         let old_cwd = match env::current_dir() {
             Ok(_p) => _p,
-            Err(_) => panic!("cannot find current working directory")
+            Err(_) => panic!("cannot find current working directory"),
         };
 
         match env::set_current_dir(Path::new("src/toml")) {
             Ok(_) => (),
-            Err(_) => panic!("cannot change working directory, cwd: {}", old_cwd.display())
+            Err(_) => panic!(
+                "cannot change working directory, cwd: {}",
+                old_cwd.display()
+            ),
         };
 
         let result = render(edf_filename.clone());
 
         match env::set_current_dir(old_cwd) {
             Ok(_) => (),
-            Err(_) => panic!("cannot restore working directory")
+            Err(_) => panic!("cannot restore working directory"),
         };
 
         return result;
@@ -747,9 +776,21 @@ mod tests {
     fn render_top_mounts() {
         let edf = get_rendered_edf("top-mounts.toml").unwrap();
         assert!(edf.image == "ubuntu:mounts");
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/aaa:/bbb"));
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./ccc:./ddd"));
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/eee:./fff:ggg"));
+        assert!(
+            edf.mounts
+                .iter()
+                .any(|e| e.to_volume_string() == "/aaa:/bbb")
+        );
+        assert!(
+            edf.mounts
+                .iter()
+                .any(|e| e.to_volume_string() == "./ccc:./ddd")
+        );
+        assert!(
+            edf.mounts
+                .iter()
+                .any(|e| e.to_volume_string() == "/eee:./fff:ggg")
+        );
         assert!(edf.mounts.len() == 3);
     }
 
@@ -817,11 +858,31 @@ mod tests {
         assert!(edf.devices.contains(&"dev4".to_string()));
         assert!(edf.devices.contains(&"dev5".to_string()));
         assert!(edf.devices.len() == 5);
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/aaa:/bbb"));
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./ccc:./ddd"));
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/eee:./fff:ggg"));
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "/hhh:/iii"));
-        assert!(edf.mounts.iter().any(|e| e.to_volume_string() == "./jjj:./kkk"));
+        assert!(
+            edf.mounts
+                .iter()
+                .any(|e| e.to_volume_string() == "/aaa:/bbb")
+        );
+        assert!(
+            edf.mounts
+                .iter()
+                .any(|e| e.to_volume_string() == "./ccc:./ddd")
+        );
+        assert!(
+            edf.mounts
+                .iter()
+                .any(|e| e.to_volume_string() == "/eee:./fff:ggg")
+        );
+        assert!(
+            edf.mounts
+                .iter()
+                .any(|e| e.to_volume_string() == "/hhh:/iii")
+        );
+        assert!(
+            edf.mounts
+                .iter()
+                .any(|e| e.to_volume_string() == "./jjj:./kkk")
+        );
         assert!(edf.mounts.len() == 5);
     }
 
@@ -861,5 +922,12 @@ mod tests {
     fn render_not_a_toml_file() {
         let result = render(String::from("src/toml/plain.txt"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn render_unknown_entry() {
+        let result = render(String::from("src/toml/unknown_entry.toml"));
+        assert!(result.is_ok());
     }
 }
