@@ -421,6 +421,10 @@ mod tests {
     fn merge_config_and_edf() {
         let mut cfg = get_rendered_config("config");
         let edf = get_rendered_edf("config_test.toml").unwrap();
+        
+        let pwd = std::env::var("PWD").unwrap();
+        let expected_tracking_tool = format!("{pwd}/tracking_tool_edf");
+        
         update_config_by_user(&mut cfg, edf);
         assert!(cfg.parallax_imagestore == "parallax_imagestore_edf");
         assert!(cfg.parallax_mount_program == "parallax_mount_program_edf");
@@ -432,6 +436,6 @@ mod tests {
         assert!(cfg.runtime_path == "crun_edf");
         assert!(cfg.skybox_enabled == false);
         assert!(cfg.tracking_enabled == false);
-        assert!(cfg.tracking_tool == "tracking_tool_edf");
+        assert!(cfg.tracking_tool == expected_tracking_tool);
     }
 }
