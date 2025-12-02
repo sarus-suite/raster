@@ -4,7 +4,7 @@
   "title": "Environment",
   "description": "An environment for containers",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "annotations": {
       "description": "OCI-like annotations for the container.",
@@ -18,12 +18,6 @@
       "description": "List of devices.",
       "type": "array",
       "default": []
-    },
-    "engine": {
-      "description": "[deprecated] select backend engine, it could be \"enroot\" or \"podman\"",
-      "type": "string",
-      "default": "podman",
-      "enum": ["enroot", "podman"]
     },
     "entrypoint": {
       "description": "If true, run the entrypoint from the container image.",
@@ -47,38 +41,6 @@
         "type": "string",
         "pattern": "^[^:]+:[^:]+(:[^:]+)?$"
       }
-    },
-    "parallax_enable": {
-      "description": "",
-      "type": "boolean"
-    },
-    "parallax_imagestore": {
-      "description": "",
-      "type": "string"
-    },
-    "parallax_mount_program": {
-      "description": "",
-      "type": "string"
-    },
-    "parallax_path": {
-      "description": "",
-      "type": "string"
-    },
-    "perfmon": {
-      "description": "",
-      "type": "boolean"
-    },
-    "podman_module": {
-      "description": "",
-      "type": "string"
-    },
-    "podman_path": {
-      "description": "",
-      "type": "string"
-    },
-    "podman_tmp_path": {
-      "description": "",
-      "type": "string"
     },
     "workdir": {
       "description": "Initial working directory when the container starts.",
