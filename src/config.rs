@@ -1,7 +1,8 @@
 use crate::common::expand_vars_string;
 use crate::{EDF, SarusResult, check_file_path_extension, validate_file};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 
 const CONFIG_PATH: &str = "/etc/sarus-suite";
 
@@ -21,7 +22,7 @@ pub struct RawConfig {
     tracking_tool: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct Config {
     #[serde(default = "get_default_edf_system_search_path")]
     pub edf_system_search_path: String,
@@ -203,7 +204,7 @@ fn validate_configfile(path: String) -> SarusResult<()> {
     validate_file(path, schema_content)
 }
 
-fn load_raw_config_from_file(filepath: String) -> RawConfig {
+fn load_raw_config_from_file(filepath: String, env_option: &Option<HashMap<String,String>>) -> RawConfig {
     let empty = RawConfig::default();
 
     if validate_configfile(filepath.clone()).is_err() {
@@ -229,42 +230,46 @@ fn load_raw_config_from_file(filepath: String) -> RawConfig {
     let mut r: RawConfig = toml_value;
 
     // Expand variables in the fields
-    expand_raw_option_string(&mut r.edf_system_search_path);
-    expand_raw_option_string(&mut r.parallax_imagestore);
-    expand_raw_option_string(&mut r.parallax_mount_program);
-    expand_raw_option_string(&mut r.parallax_path);
-    expand_raw_option_string(&mut r.podman_module);
-    expand_raw_option_string(&mut r.podman_path);
-    expand_raw_option_string(&mut r.podman_tmp_path);
-    expand_raw_option_string(&mut r.runtime_path);
-    expand_raw_option_string(&mut r.tracking_tool);
+    expand_raw_config_fields(&mut r, env_option);
 
     r
 }
 
-fn expand_raw_option_string(optstr: &mut Option<String>) {
+fn expand_raw_config_fields(r: &mut RawConfig, e: &Option<HashMap<String,String>>) {
+    expand_raw_option_string(&mut r.edf_system_search_path, e);
+    expand_raw_option_string(&mut r.parallax_imagestore, e);
+    expand_raw_option_string(&mut r.parallax_mount_program, e);
+    expand_raw_option_string(&mut r.parallax_path, e);
+    expand_raw_option_string(&mut r.podman_module, e);
+    expand_raw_option_string(&mut r.podman_path, e);
+    expand_raw_option_string(&mut r.podman_tmp_path, e);
+    expand_raw_option_string(&mut r.runtime_path, e);
+    expand_raw_option_string(&mut r.tracking_tool, e);
+}
+
+fn expand_raw_option_string(optstr: &mut Option<String>, env_option: &Option<HashMap<String,String>>) {
     if optstr.is_some() {
         *optstr =
-            Some(expand_vars_string(optstr.clone().unwrap(), &None).unwrap_or(String::from("")));
+            Some(expand_vars_string(optstr.clone().unwrap(), env_option).unwrap_or(String::from("")));
     }
 }
 
 pub fn load_config() -> Config {
-    load_config_path(None)
+    load_config_path(None, &None)
 }
 
-pub fn load_config_path(config_option: Option<&Path>) -> Config {
+pub fn load_config_path(config_option: Option<PathBuf>, env_option: &Option<HashMap<String,String>>) -> Config {
     let config_path = match config_option {
         Some(path) => path,
-        None => Path::new(CONFIG_PATH),
+        None => PathBuf::from(CONFIG_PATH),
     };
 
-    let r = load_raw_config_from_dir(config_path);
+    let r = load_raw_config_from_dir(&config_path, env_option);
     let c = Config::from(r);
     c
 }
 
-fn load_raw_config_from_dir(config_path: &Path) -> RawConfig {
+fn load_raw_config_from_dir(config_path: &Path, env_option: &Option<HashMap<String,String>>) -> RawConfig {
     let empty = RawConfig::default();
 
     let readdir = match std::fs::read_dir(config_path) {
@@ -297,7 +302,7 @@ fn load_raw_config_from_dir(config_path: &Path) -> RawConfig {
         }
 
         if file_name.ends_with(".conf") {
-            let cur_rcfg = load_raw_config_from_file(file_path);
+            let cur_rcfg = load_raw_config_from_file(file_path, env_option);
             rcfg.extend(cur_rcfg);
         }
     }
