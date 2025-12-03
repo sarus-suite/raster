@@ -8,7 +8,7 @@ use std::path::Path;
 use toml::Value;
 use toml::map::Map;
 
-use crate::common::{expand_vars_hashmap, expand_vars_string, expand_vars_vec};
+use crate::common::{expand_vars_hashmap, expand_vars_vec};
 use crate::error::{SarusError, SarusResult};
 use crate::mount::{SarusMounts, sarus_mounts_from_strings};
 
@@ -17,6 +17,7 @@ pub mod config;
 pub mod error;
 pub mod mount;
 
+pub use crate::common::expand_vars_string;
 pub use crate::config::{load_config, load_config_path, update_config_by_user};
 
 #[allow(dead_code)]

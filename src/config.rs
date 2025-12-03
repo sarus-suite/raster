@@ -26,27 +26,27 @@ pub struct Config {
     #[serde(default = "get_default_edf_system_search_path")]
     pub edf_system_search_path: String,
     #[serde(default = "get_default_parallax_imagestore")]
-    pub(crate) parallax_imagestore: String,
+    pub parallax_imagestore: String,
     #[serde(default = "get_default_parallax_mount_program")]
-    pub(crate) parallax_mount_program: String,
+    pub parallax_mount_program: String,
     #[serde(default = "get_default_parallax_path")]
-    pub(crate) parallax_path: String,
+    pub parallax_path: String,
     #[serde(default = "get_default_perfmon")]
-    pub(crate) perfmon: bool,
+    pub perfmon: bool,
     #[serde(default = "get_default_podman_module")]
-    pub(crate) podman_module: String,
+    pub podman_module: String,
     #[serde(default = "get_default_podman_path")]
-    pub(crate) podman_path: String,
+    pub podman_path: String,
     #[serde(default = "get_default_podman_tmp_path")]
-    pub(crate) podman_tmp_path: String,
+    pub podman_tmp_path: String,
     #[serde(default = "get_default_runtime_path")]
-    pub(crate) runtime_path: String,
+    pub runtime_path: String,
     #[serde(default = "get_default_skybox_enabled")]
-    pub(crate) skybox_enabled: bool,
+    pub skybox_enabled: bool,
     #[serde(default = "get_default_tracking_enabled")]
-    pub(crate) tracking_enabled: bool,
+    pub tracking_enabled: bool,
     #[serde(default = "get_default_tracking_tool")]
-    pub(crate) tracking_tool: String,
+    pub tracking_tool: String,
 }
 
 fn get_default_edf_system_search_path() -> String {
@@ -421,10 +421,10 @@ mod tests {
     fn merge_config_and_edf() {
         let mut cfg = get_rendered_config("config");
         let edf = get_rendered_edf("config_test.toml").unwrap();
-        
+
         let pwd = std::env::var("PWD").unwrap();
         let expected_tracking_tool = format!("{pwd}/tracking_tool_edf");
-        
+
         update_config_by_user(&mut cfg, edf);
         assert!(cfg.parallax_imagestore == "parallax_imagestore_edf");
         assert!(cfg.parallax_mount_program == "parallax_mount_program_edf");
