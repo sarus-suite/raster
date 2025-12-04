@@ -413,12 +413,6 @@ mod tests {
         assert!(cfg.skybox_enabled == true);
         assert!(cfg.tracking_enabled == false);
         assert!(cfg.tracking_tool == "");
-
-        let last_cwd = match std::env::current_dir() {
-            Ok(_p) => _p,
-            Err(_) => panic!("cannot find current working directory"),
-        };
-        println!("{:?}", last_cwd);
     }
 
     #[test]
