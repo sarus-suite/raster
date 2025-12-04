@@ -391,8 +391,8 @@ mod tests {
             .into_string()
             .unwrap();
         let cfg_path = format!("{}/test/{}", cwd, cfg_dir);
-        let opt_cfg_d = Some(Path::new(&cfg_path));
-        load_config_path(opt_cfg_d)
+        let opt_cfg_d = Some(PathBuf::from(cfg_path));
+        load_config_path(opt_cfg_d, &None)
     }
 
     #[test]
