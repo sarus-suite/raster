@@ -490,7 +490,14 @@ pub fn get_search_paths() -> Vec<String> {
 
 pub fn get_sys_search_paths() -> Vec<String> {
     let mut search_paths = vec![];
-    let config = load_config();
+
+    let config = match load_config() {
+        Ok(c) => c,
+        Err(_) => {
+            return search_paths;
+        }
+    };
+
     let sys_search_path = config.edf_system_search_path;
 
     if sys_search_path != "" {
@@ -580,7 +587,36 @@ fn resolve_env_path(
         }
     }
 }
+/*
+pub(crate) fn toml_read<'de, T>(s: &'de str) -> SarusResult<T>
+where
+    T: Deserialize<'de>,
+{
+    let toml_content = match load(s) {
+        Ok(c) => c,
+        Err(e) => {
+            return Err(SarusError {
+                code: 2,
+                file_path: Some(String::from(s)),
+                msg: String::from(format!("{}", e)),
+            });
+        }
+    };
 
+    let toml_value = match toml::from_str(&toml_content) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(SarusError {
+                code: 3,
+                file_path: Some(String::from(s)),
+                msg: String::from(format!("{}", e)),
+            });
+        }
+    };
+
+    Ok(toml_value)
+}
+*/
 fn render_inner_loop(
     name: String,
     sp: &Vec<String>,
@@ -605,6 +641,7 @@ fn render_inner_loop(
     // Create current raw EDF
     let path_str = edf_path.as_str();
 
+    //To be replaced by toml_read when it will work.
     let toml_content = match load(path_str) {
         Ok(c) => c,
         Err(e) => {
@@ -628,6 +665,7 @@ fn render_inner_loop(
     };
 
     let mut cur_redf: RawEDF = toml_value;
+    //let mut cur_redf: RawEDF = toml_read(path_str)?;
 
     // Merge base EDFs
     if cur_redf.base_environment.is_some() {
@@ -735,7 +773,7 @@ mod tests {
             Err(_) => panic!("cannot find current working directory"),
         };
 
-        match env::set_current_dir(Path::new("src/toml")) {
+        match env::set_current_dir(Path::new("test/toml")) {
             Ok(_) => (),
             Err(_) => panic!(
                 "cannot change working directory, cwd: {}",
@@ -914,21 +952,21 @@ mod tests {
     #[test]
     #[serial]
     fn render_file_not_found() {
-        let result = render(String::from("src/toml/not_found.toml"));
+        let result = render(String::from("test/toml/not_found.toml"));
         assert!(result.is_err());
     }
 
     #[test]
     #[serial]
     fn render_not_a_toml_file() {
-        let result = render(String::from("src/toml/plain.txt"));
+        let result = render(String::from("test/toml/plain.txt"));
         assert!(result.is_err());
     }
 
     #[test]
     #[serial]
     fn render_unknown_entry() {
-        let result = render(String::from("src/toml/unknown_entry.toml"));
+        let result = render(String::from("test/toml/unknown_entry.toml"));
         assert!(result.is_ok());
     }
 }
