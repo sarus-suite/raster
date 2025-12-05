@@ -1,8 +1,8 @@
 use crate::common::expand_vars_string;
-use crate::{EDF, SarusResult, check_file_path_extension, validate_file};
+use crate::{EDF, SarusError, SarusResult, check_file_path_extension, validate_file};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 const CONFIG_PATH: &str = "/etc/sarus-suite";
 
@@ -204,78 +204,106 @@ fn validate_configfile(path: String) -> SarusResult<()> {
     validate_file(path, schema_content)
 }
 
-fn load_raw_config_from_file(filepath: String, env_option: &Option<HashMap<String,String>>) -> RawConfig {
-    let empty = RawConfig::default();
+fn load_raw_config_from_file(
+    filepath: String,
+    env_option: &Option<HashMap<String, String>>,
+) -> SarusResult<RawConfig> {
+    //let empty = RawConfig::default();
 
-    if validate_configfile(filepath.clone()).is_err() {
-        return empty;
-    }
+    validate_configfile(filepath.clone())?;
 
     let path_str = filepath.as_str();
 
+    //To be replaced by toml_read when it will work.
     let toml_content = match std::fs::read_to_string(path_str) {
         Ok(c) => c,
-        Err(_) => {
-            return empty;
+        Err(e) => {
+            return Err(SarusError {
+                code: 2,
+                file_path: Some(String::from(path_str)),
+                msg: String::from(format!("{}", e)),
+            });
         }
     };
 
     let toml_value = match toml::from_str(&toml_content) {
         Ok(v) => v,
-        Err(_) => {
-            return empty;
+        Err(e) => {
+            return Err(SarusError {
+                code: 3,
+                file_path: Some(String::from(path_str)),
+                msg: String::from(format!("{}", e)),
+            });
         }
     };
 
     let mut r: RawConfig = toml_value;
+    //let mut r: RawConfig = toml_read(path_str)?;
 
     // Expand variables in the fields
-    expand_raw_config_fields(&mut r, env_option);
+    expand_raw_config_fields(&mut r, env_option)?;
 
-    r
+    Ok(r)
 }
 
-fn expand_raw_config_fields(r: &mut RawConfig, e: &Option<HashMap<String,String>>) {
-    expand_raw_option_string(&mut r.edf_system_search_path, e);
-    expand_raw_option_string(&mut r.parallax_imagestore, e);
-    expand_raw_option_string(&mut r.parallax_mount_program, e);
-    expand_raw_option_string(&mut r.parallax_path, e);
-    expand_raw_option_string(&mut r.podman_module, e);
-    expand_raw_option_string(&mut r.podman_path, e);
-    expand_raw_option_string(&mut r.podman_tmp_path, e);
-    expand_raw_option_string(&mut r.runtime_path, e);
-    expand_raw_option_string(&mut r.tracking_tool, e);
+fn expand_raw_config_fields(
+    r: &mut RawConfig,
+    e: &Option<HashMap<String, String>>,
+) -> SarusResult<()> {
+    expand_raw_option_string(&mut r.edf_system_search_path, e)?;
+    expand_raw_option_string(&mut r.parallax_imagestore, e)?;
+    expand_raw_option_string(&mut r.parallax_mount_program, e)?;
+    expand_raw_option_string(&mut r.parallax_path, e)?;
+    expand_raw_option_string(&mut r.podman_module, e)?;
+    expand_raw_option_string(&mut r.podman_path, e)?;
+    expand_raw_option_string(&mut r.podman_tmp_path, e)?;
+    expand_raw_option_string(&mut r.runtime_path, e)?;
+    expand_raw_option_string(&mut r.tracking_tool, e)?;
+    Ok(())
 }
 
-fn expand_raw_option_string(optstr: &mut Option<String>, env_option: &Option<HashMap<String,String>>) {
+fn expand_raw_option_string(
+    optstr: &mut Option<String>,
+    env_option: &Option<HashMap<String, String>>,
+) -> SarusResult<()> {
     if optstr.is_some() {
-        *optstr =
-            Some(expand_vars_string(optstr.clone().unwrap(), env_option).unwrap_or(String::from("")));
+        *optstr = Some(expand_vars_string(optstr.clone().unwrap(), env_option)?);
     }
+    Ok(())
 }
 
-pub fn load_config() -> Config {
+pub fn load_config() -> SarusResult<Config> {
     load_config_path(None, &None)
 }
 
-pub fn load_config_path(config_option: Option<PathBuf>, env_option: &Option<HashMap<String,String>>) -> Config {
+pub fn load_config_path(
+    config_option: Option<PathBuf>,
+    env_option: &Option<HashMap<String, String>>,
+) -> SarusResult<Config> {
     let config_path = match config_option {
         Some(path) => path,
         None => PathBuf::from(CONFIG_PATH),
     };
 
-    let r = load_raw_config_from_dir(&config_path, env_option);
+    let r = load_raw_config_from_dir(&config_path, env_option)?;
     let c = Config::from(r);
-    c
+    Ok(c)
 }
 
-fn load_raw_config_from_dir(config_path: &Path, env_option: &Option<HashMap<String,String>>) -> RawConfig {
+fn load_raw_config_from_dir(
+    config_path: &Path,
+    env_option: &Option<HashMap<String, String>>,
+) -> SarusResult<RawConfig> {
     let empty = RawConfig::default();
 
     let readdir = match std::fs::read_dir(config_path) {
         Ok(ok) => ok,
-        Err(_) => {
-            return empty;
+        Err(emsg) => {
+            return Err(SarusError {
+                code: 23,
+                file_path: Some(config_path.to_string_lossy().to_string()),
+                msg: String::from(format!("Cannot find config files, {}", emsg)),
+            });
         }
     };
 
@@ -302,14 +330,14 @@ fn load_raw_config_from_dir(config_path: &Path, env_option: &Option<HashMap<Stri
         }
 
         if file_name.ends_with(".conf") {
-            let cur_rcfg = load_raw_config_from_file(file_path, env_option);
+            let cur_rcfg = load_raw_config_from_file(file_path, env_option)?;
             rcfg.extend(cur_rcfg);
         }
     }
-    rcfg
+    Ok(rcfg)
 }
 
-pub fn update_config_by_user(config: &mut Config, edf: EDF) {
+pub fn update_config_by_user(config: &mut Config, edf: EDF) -> SarusResult<()> {
     let parallax_imagestore = edf.annotations.get("com.sarus.parallax_imagestore");
     if parallax_imagestore.is_some() {
         config.parallax_imagestore = parallax_imagestore.unwrap().to_string();
@@ -376,6 +404,7 @@ pub fn update_config_by_user(config: &mut Config, edf: EDF) {
     if tracking_tool.is_some() {
         config.tracking_tool = tracking_tool.unwrap().to_string();
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -384,7 +413,7 @@ mod tests {
     use crate::tests::get_rendered_edf;
     use serial_test::serial;
 
-    fn get_rendered_config(cfg_dir: &str) -> Config {
+    fn get_rendered_config(cfg_dir: &str) -> SarusResult<Config> {
         let cwd = std::env::current_dir()
             .unwrap()
             .into_os_string()
@@ -397,7 +426,7 @@ mod tests {
 
     #[test]
     fn load_config() {
-        let cfg = get_rendered_config("config");
+        let cfg = get_rendered_config("config").unwrap();
         let pwd = std::env::var("PWD").unwrap();
         let expected_imagestore = format!("{pwd}/imagestore");
 
@@ -416,15 +445,21 @@ mod tests {
     }
 
     #[test]
+    fn load_config_unquoted() {
+        let result = get_rendered_config("config.unquoted");
+        assert!(result.is_err())
+    }
+
+    #[test]
     #[serial]
     fn merge_config_and_edf() {
-        let mut cfg = get_rendered_config("config");
+        let mut cfg = get_rendered_config("config").unwrap();
         let edf = get_rendered_edf("config_test.toml").unwrap();
 
         let pwd = std::env::var("PWD").unwrap();
         let expected_tracking_tool = format!("{pwd}/tracking_tool_edf");
 
-        update_config_by_user(&mut cfg, edf);
+        let _ = update_config_by_user(&mut cfg, edf);
         assert!(cfg.parallax_imagestore == "parallax_imagestore_edf");
         assert!(cfg.parallax_mount_program == "parallax_mount_program_edf");
         assert!(cfg.parallax_path == "parallax_path_edf");

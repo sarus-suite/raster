@@ -33,7 +33,7 @@ fn expand_vars_string_with_env(
     let output = Command::new("bash")
         .arg("-r")
         .arg("-c")
-        .arg(format!("echo -n \"{}\"", &input))
+        .arg(format!("set -u;echo -n \"{}\"", &input))
         .env_clear()
         .envs(env)
         .output();
@@ -135,11 +135,6 @@ mod tests {
             r#"xxx-11-xxx"#
         ));
         assert!(check_expand_vars_string(
-            r#"xxx-${YYY:-222}-xxx"#,
-            r#"xxx-222-xxx"#
-        ));
-        assert!(check_expand_vars_string(r#"xxx-${YYY}-xxx"#, r#"xxx--xxx"#));
-        assert!(check_expand_vars_string(
             r#"xxx-\$(XXX)-xxx"#,
             r#"xxx-$(XXX)-xxx"#
         ));
@@ -153,6 +148,18 @@ mod tests {
         ));
         assert!(check_expand_vars_string(r#"xxx--xxx\;"#, r#"xxx--xxx\;"#));
         assert!(check_expand_vars_string(r#"\"xxx--xxx\""#, r#""xxx--xxx""#));
+    }
+
+    #[test]
+    fn expand_vars_unknown_var() {
+        assert!(!check_expand_vars_string(
+            r#"xxx-${YYY}-xxx"#,
+            r#"xxx--xxx"#
+        ));
+        assert!(check_expand_vars_string(
+            r#"xxx-${YYY:-222}-xxx"#,
+            r#"xxx-222-xxx"#
+        ));
     }
 
     #[test]
