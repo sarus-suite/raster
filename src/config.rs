@@ -206,6 +206,7 @@ fn validate_configfile(path: String) -> SarusResult<()> {
 
 fn load_raw_config_from_file(
     filepath: String,
+    force_expand: &Option<bool>,
     env_option: &Option<HashMap<String, String>>,
 ) -> SarusResult<RawConfig> {
     //let empty = RawConfig::default();
@@ -241,43 +242,73 @@ fn load_raw_config_from_file(
     //let mut r: RawConfig = toml_read(path_str)?;
 
     // Expand variables in the fields
-    expand_raw_config_fields(&mut r, env_option)?;
+    expand_raw_config_fields(&mut r, force_expand, env_option)?;
 
     Ok(r)
 }
 
 fn expand_raw_config_fields(
     r: &mut RawConfig,
+    force_expand: &Option<bool>,
     e: &Option<HashMap<String, String>>,
 ) -> SarusResult<()> {
-    expand_raw_option_string(&mut r.edf_system_search_path, e)?;
-    expand_raw_option_string(&mut r.parallax_imagestore, e)?;
-    expand_raw_option_string(&mut r.parallax_mount_program, e)?;
-    expand_raw_option_string(&mut r.parallax_path, e)?;
-    expand_raw_option_string(&mut r.podman_module, e)?;
-    expand_raw_option_string(&mut r.podman_path, e)?;
-    expand_raw_option_string(&mut r.podman_tmp_path, e)?;
-    expand_raw_option_string(&mut r.runtime_path, e)?;
-    expand_raw_option_string(&mut r.tracking_tool, e)?;
+
+    if force_expand.is_none() {
+        return Ok(())
+    }
+
+    let force = force_expand.unwrap();
+
+    expand_raw_option_string(&mut r.edf_system_search_path, force, e)?;
+    expand_raw_option_string(&mut r.parallax_imagestore, force, e)?;
+    expand_raw_option_string(&mut r.parallax_mount_program, force, e)?;
+    expand_raw_option_string(&mut r.parallax_path, force, e)?;
+    expand_raw_option_string(&mut r.podman_module, force, e)?;
+    expand_raw_option_string(&mut r.podman_path, force, e)?;
+    expand_raw_option_string(&mut r.podman_tmp_path, force, e)?;
+    expand_raw_option_string(&mut r.runtime_path, force, e)?;
+    expand_raw_option_string(&mut r.tracking_tool, force, e)?;
     Ok(())
 }
 
 fn expand_raw_option_string(
     optstr: &mut Option<String>,
+    force: bool,
     env_option: &Option<HashMap<String, String>>,
 ) -> SarusResult<()> {
     if optstr.is_some() {
-        *optstr = Some(expand_vars_string(optstr.clone().unwrap(), env_option)?);
+        let original = optstr.clone().unwrap();
+        let updated = match expand_vars_string(original.clone(), env_option) {
+            Ok(s) => s,
+            Err(e) => {
+                if force {
+                    return Err(e);
+                } else {
+                    original
+                }
+            },
+        };
+        *optstr = Some(updated);
+        //*optstr = Some(expand_vars_string(original_string, env_option)?);
     }
     Ok(())
 }
 
 pub fn load_config() -> SarusResult<Config> {
-    load_config_path(None, &None)
+    load_config_path(None, &Some(true), &None)
 }
 
+/*
+ force_expand: &Option<bool>
+ * &None => Do not expand variables.
+ * &Some(false) => Try to expand variables, return original string in case of errors.
+ * &Some(true) => Expand variables, return Error in case of errors.
+ *
+ * DOUBT: Would an enum be clearer ?
+ */
 pub fn load_config_path(
     config_option: Option<PathBuf>,
+    force_expand: &Option<bool>,
     env_option: &Option<HashMap<String, String>>,
 ) -> SarusResult<Config> {
     let config_path = match config_option {
@@ -285,13 +316,14 @@ pub fn load_config_path(
         None => PathBuf::from(CONFIG_PATH),
     };
 
-    let r = load_raw_config_from_dir(&config_path, env_option)?;
+    let r = load_raw_config_from_dir(&config_path, force_expand, env_option)?;
     let c = Config::from(r);
     Ok(c)
 }
 
 fn load_raw_config_from_dir(
     config_path: &Path,
+    force_expand: &Option<bool>,
     env_option: &Option<HashMap<String, String>>,
 ) -> SarusResult<RawConfig> {
     let empty = RawConfig::default();
@@ -330,7 +362,7 @@ fn load_raw_config_from_dir(
         }
 
         if file_name.ends_with(".conf") {
-            let cur_rcfg = load_raw_config_from_file(file_path, env_option)?;
+            let cur_rcfg = load_raw_config_from_file(file_path, force_expand, env_option)?;
             rcfg.extend(cur_rcfg);
         }
     }
