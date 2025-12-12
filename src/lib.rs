@@ -959,7 +959,7 @@ mod tests {
     #[test]
     #[serial]
     fn render_not_a_toml_file() {
-        let result = render(String::from("test/toml/plain.txt"));
+        let result = render(String::from("test/etc/plain.txt"));
         assert!(result.is_err());
     }
 
