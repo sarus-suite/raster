@@ -50,6 +50,13 @@ pub struct Config {
     pub tracking_tool: String,
 }
 
+#[derive(Clone, Copy)]
+pub enum VarExpand {
+    Never,  // Do not expand variables.
+    Try,    // Try to expand variables, return original string in case of errors.
+    Must,   // Expand variables, return Error in case of errors.
+}
+
 fn get_default_edf_system_search_path() -> String {
     return String::from("/etc/edf");
 }
@@ -206,7 +213,7 @@ fn validate_configfile(path: String) -> SarusResult<()> {
 
 fn load_raw_config_from_file(
     filepath: String,
-    force_expand: &Option<bool>,
+    force_expand: VarExpand,
     env_option: &Option<HashMap<String, String>>,
 ) -> SarusResult<RawConfig> {
     //let empty = RawConfig::default();
@@ -249,14 +256,14 @@ fn load_raw_config_from_file(
 
 fn expand_raw_config_fields(
     r: &mut RawConfig,
-    force_expand: &Option<bool>,
+    force_expand: VarExpand,
     e: &Option<HashMap<String, String>>,
 ) -> SarusResult<()> {
-    if force_expand.is_none() {
-        return Ok(());
-    }
-
-    let force = force_expand.unwrap();
+    let force = match force_expand {
+        VarExpand::Never    => return Ok(()),
+        VarExpand::Try      => false,
+        VarExpand::Must     => true,
+    };
 
     expand_raw_option_string(&mut r.edf_system_search_path, force, e)?;
     expand_raw_option_string(&mut r.parallax_imagestore, force, e)?;
@@ -294,20 +301,12 @@ fn expand_raw_option_string(
 }
 
 pub fn load_config() -> SarusResult<Config> {
-    load_config_path(None, &Some(true), &None)
+    load_config_path(None, VarExpand::Must, &None)
 }
 
-/*
-force_expand: &Option<bool>
-* &None => Do not expand variables.
-* &Some(false) => Try to expand variables, return original string in case of errors.
-* &Some(true) => Expand variables, return Error in case of errors.
-*
-* DOUBT: Would an enum be clearer ?
-*/
 pub fn load_config_path(
     config_option: Option<PathBuf>,
-    force_expand: &Option<bool>,
+    force_expand: VarExpand,
     env_option: &Option<HashMap<String, String>>,
 ) -> SarusResult<Config> {
     let config_path = match config_option {
@@ -322,7 +321,7 @@ pub fn load_config_path(
 
 fn load_raw_config_from_dir(
     config_path: &Path,
-    force_expand: &Option<bool>,
+    force_expand: VarExpand,
     env_option: &Option<HashMap<String, String>>,
 ) -> SarusResult<RawConfig> {
     let empty = RawConfig::default();
@@ -452,7 +451,7 @@ mod tests {
             .unwrap();
         let cfg_path = format!("{}/test/{}", cwd, cfg_dir);
         let opt_cfg_d = Some(PathBuf::from(cfg_path));
-        load_config_path(opt_cfg_d, &Some(true), &None)
+        load_config_path(opt_cfg_d, VarExpand::Must, &None)
     }
 
     #[test]
