@@ -431,30 +431,10 @@ pub(crate) fn validate_file(path: String, schema_content: &str) -> SarusResult<(
         }
     };
 
-    let toml_content = match load(path_str) {
-        Ok(c) => c,
-        Err(e) => {
-            return Err(SarusError {
-                code: 2,
-                file_path: Some(String::from(path_str)),
-                msg: String::from(format!("{}", e)),
-            });
-        }
-    };
-
-    let toml_value = match toml::from_str(&toml_content) {
-        Ok(v) => v,
-        Err(e) => {
-            return Err(SarusError {
-                code: 15,
-                file_path: Some(String::from(path_str)),
-                msg: String::from(format!("{}", e)),
-            });
-        }
-    };
-
     let mut has_errors = false;
-    let mut errors = validator.iter_errors(&toml_value);
+
+    let toml_in = toml_read(path_str)?;
+    let mut errors = validator.iter_errors(&toml_in);
     let mut emsg = String::from("");
 
     if let Some(first) = errors.next() {
