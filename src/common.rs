@@ -33,7 +33,7 @@ fn expand_vars_string_with_env(
     let output = Command::new("bash")
         .arg("-r")
         .arg("-c")
-        .arg(format!("set -u;echo -n \"{}\"", &input))
+        .arg(format!("set -u; echo -n \"{}\"", &input))
         .env_clear()
         .envs(env)
         .output();
