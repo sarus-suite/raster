@@ -252,9 +252,8 @@ fn expand_raw_config_fields(
     force_expand: &Option<bool>,
     e: &Option<HashMap<String, String>>,
 ) -> SarusResult<()> {
-
     if force_expand.is_none() {
-        return Ok(())
+        return Ok(());
     }
 
     let force = force_expand.unwrap();
@@ -286,7 +285,7 @@ fn expand_raw_option_string(
                 } else {
                     original
                 }
-            },
+            }
         };
         *optstr = Some(updated);
         //*optstr = Some(expand_vars_string(original_string, env_option)?);
@@ -299,13 +298,13 @@ pub fn load_config() -> SarusResult<Config> {
 }
 
 /*
- force_expand: &Option<bool>
- * &None => Do not expand variables.
- * &Some(false) => Try to expand variables, return original string in case of errors.
- * &Some(true) => Expand variables, return Error in case of errors.
- *
- * DOUBT: Would an enum be clearer ?
- */
+force_expand: &Option<bool>
+* &None => Do not expand variables.
+* &Some(false) => Try to expand variables, return original string in case of errors.
+* &Some(true) => Expand variables, return Error in case of errors.
+*
+* DOUBT: Would an enum be clearer ?
+*/
 pub fn load_config_path(
     config_option: Option<PathBuf>,
     force_expand: &Option<bool>,

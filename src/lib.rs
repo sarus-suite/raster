@@ -570,7 +570,7 @@ fn resolve_env_path(
 
 pub(crate) fn toml_read<T>(s: &str) -> SarusResult<T>
 where
-    T: for<'a> Deserialize<'a>
+    T: for<'a> Deserialize<'a>,
 {
     let toml_content = match load(s) {
         Ok(c) => c,
