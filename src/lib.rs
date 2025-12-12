@@ -587,10 +587,10 @@ fn resolve_env_path(
         }
     }
 }
-/*
-pub(crate) fn toml_read<'de, T>(s: &'de str) -> SarusResult<T>
+
+pub(crate) fn toml_read<T>(s: &str) -> SarusResult<T>
 where
-    T: Deserialize<'de>,
+    T: for<'a> Deserialize<'a>
 {
     let toml_content = match load(s) {
         Ok(c) => c,
@@ -603,7 +603,7 @@ where
         }
     };
 
-    let toml_value = match toml::from_str(&toml_content) {
+    let toml_value = match toml::from_str(toml_content.as_str()) {
         Ok(v) => v,
         Err(e) => {
             return Err(SarusError {
@@ -616,7 +616,7 @@ where
 
     Ok(toml_value)
 }
-*/
+
 fn render_inner_loop(
     name: String,
     sp: &Vec<String>,
@@ -640,32 +640,7 @@ fn render_inner_loop(
 
     // Create current raw EDF
     let path_str = edf_path.as_str();
-
-    //To be replaced by toml_read when it will work.
-    let toml_content = match load(path_str) {
-        Ok(c) => c,
-        Err(e) => {
-            return Err(SarusError {
-                code: 2,
-                file_path: Some(String::from(path_str)),
-                msg: String::from(format!("{}", e)),
-            });
-        }
-    };
-
-    let toml_value = match toml::from_str(toml_content.as_str()) {
-        Ok(v) => v,
-        Err(e) => {
-            return Err(SarusError {
-                code: 3,
-                file_path: Some(String::from(edf_path)),
-                msg: String::from(format!("{}", e)),
-            });
-        }
-    };
-
-    let mut cur_redf: RawEDF = toml_value;
-    //let mut cur_redf: RawEDF = toml_read(path_str)?;
+    let mut cur_redf: RawEDF = toml_read(path_str)?;
 
     // Merge base EDFs
     if cur_redf.base_environment.is_some() {
