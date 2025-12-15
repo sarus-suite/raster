@@ -18,7 +18,7 @@ pub mod error;
 pub mod mount;
 
 pub use crate::common::expand_vars_string;
-pub use crate::config::{Config, load_config, load_config_path, update_config_by_user};
+pub use crate::config::{Config, VarExpand, load_config, load_config_path, update_config_by_user};
 
 #[allow(dead_code)]
 #[derive(Derivative, Serialize, Deserialize, Clone, Default)]

@@ -52,9 +52,9 @@ pub struct Config {
 
 #[derive(Clone, Copy)]
 pub enum VarExpand {
-    Never,  // Do not expand variables.
-    Try,    // Try to expand variables, return original string in case of errors.
-    Must,   // Expand variables, return Error in case of errors.
+    Never, // Do not expand variables.
+    Try,   // Try to expand variables, return original string in case of errors.
+    Must,  // Expand variables, return Error in case of errors.
 }
 
 fn get_default_edf_system_search_path() -> String {
@@ -260,9 +260,9 @@ fn expand_raw_config_fields(
     e: &Option<HashMap<String, String>>,
 ) -> SarusResult<()> {
     let force = match force_expand {
-        VarExpand::Never    => return Ok(()),
-        VarExpand::Try      => false,
-        VarExpand::Must     => true,
+        VarExpand::Never => return Ok(()),
+        VarExpand::Try => false,
+        VarExpand::Must => true,
     };
 
     expand_raw_option_string(&mut r.edf_system_search_path, force, e)?;
