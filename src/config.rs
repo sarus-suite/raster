@@ -9,6 +9,8 @@ const CONFIG_PATH: &str = "/etc/sarus-suite";
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct RawConfig {
     edf_system_search_path: Option<String>,
+    dynconf_url: Option<String>,
+    dynconf_path: Option<String>,
     parallax_imagestore: Option<String>,
     parallax_mount_program: Option<String>,
     parallax_path: Option<String>,
@@ -26,6 +28,10 @@ pub struct RawConfig {
 pub struct Config {
     #[serde(default = "get_default_edf_system_search_path")]
     pub edf_system_search_path: String,
+    #[serde(default = "get_default_dynconf_url")]
+    pub dynconf_url: String,
+    #[serde(default = "get_default_dynconf_path")]
+    pub dynconf_path: String,
     #[serde(default = "get_default_parallax_imagestore")]
     pub parallax_imagestore: String,
     #[serde(default = "get_default_parallax_mount_program")]
@@ -59,6 +65,14 @@ pub enum VarExpand {
 
 fn get_default_edf_system_search_path() -> String {
     return String::from("/etc/edf");
+}
+
+fn get_default_dynconf_url() -> String {
+    return String::from("");
+}
+
+fn get_default_dynconf_path() -> String {
+    return String::from("");
 }
 
 fn get_default_parallax_imagestore() -> String {
@@ -111,6 +125,14 @@ impl From<RawConfig> for Config {
             edf_system_search_path: match r.edf_system_search_path {
                 Some(s) => s,
                 None => get_default_edf_system_search_path(),
+            },
+            dynconf_url: match r.dynconf_url {
+                Some(s) => s,
+                None => get_default_dynconf_url(),
+            },
+            dynconf_path: match r.dynconf_path {
+                Some(s) => s,
+                None => get_default_dynconf_path(),
             },
             parallax_imagestore: match r.parallax_imagestore {
                 Some(s) => s,
@@ -165,6 +187,12 @@ impl RawConfig {
     fn extend(&mut self, i: RawConfig) {
         if i.edf_system_search_path.is_some() {
             self.edf_system_search_path = i.edf_system_search_path;
+        }
+        if i.dynconf_url.is_some() {
+            self.dynconf_url = i.dynconf_url;
+        }
+        if i.dynconf_path.is_some() {
+            self.dynconf_path = i.dynconf_path;
         }
         if i.parallax_imagestore.is_some() {
             self.parallax_imagestore = i.parallax_imagestore;
@@ -266,6 +294,8 @@ fn expand_raw_config_fields(
     };
 
     expand_raw_option_string(&mut r.edf_system_search_path, force, e)?;
+    expand_raw_option_string(&mut r.dynconf_url, force, e)?;
+    expand_raw_option_string(&mut r.dynconf_path, force, e)?;
     expand_raw_option_string(&mut r.parallax_imagestore, force, e)?;
     expand_raw_option_string(&mut r.parallax_mount_program, force, e)?;
     expand_raw_option_string(&mut r.parallax_path, force, e)?;
