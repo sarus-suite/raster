@@ -2,9 +2,28 @@ use crate::common::expand_vars_string;
 use crate::{EDF, SarusError, SarusResult, check_file_path_extension, validate_file};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::error::Error;
+use std::ffi::OsStr;
+use std::fmt;
 use std::path::{Path, PathBuf};
+use tracing::instrument;
 
 const CONFIG_PATH: &str = "/etc/sarus-suite";
+const XDG_CONFIG_DIR: &str = "/etc/xdg";
+const CONFIG_DIR_NAME: &str = "sarus-suite";
+
+#[derive(Debug)]
+pub struct ConfigResolutionError {
+    reason: String,
+}
+
+impl fmt::Display for ConfigResolutionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.reason)
+    }
+}
+
+impl Error for ConfigResolutionError {}
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct RawConfig {
@@ -33,7 +52,7 @@ pub struct RawConfigHooks {
     parallax_imagestore_create: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct Config {
     #[serde(default = "get_default_edf_system_search_path")]
     pub edf_system_search_path: String,
@@ -73,7 +92,7 @@ pub struct Config {
     pub tracking_tool: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct ConfigHooks {
     #[serde(default = "get_default_hook_parallax_imagestore_create")]
     pub parallax_imagestore_create: String,
@@ -162,7 +181,7 @@ fn get_default_hook_parallax_imagestore_create() -> String {
 fn get_default_hooks() -> ConfigHooks {
     return ConfigHooks {
         parallax_imagestore_create: get_default_hook_parallax_imagestore_create(),
-    }
+    };
 }
 
 impl From<RawConfig> for Config {
@@ -420,6 +439,125 @@ pub fn load_config() -> SarusResult<Config> {
     load_config_path(None, VarExpand::Must, &None)
 }
 
+/// Return the XDG configuration directories in precedence order.
+///
+/// This is intentionally opt-in: `load_config()` and `load_config_path(None, ...)`
+/// retain their legacy `/etc/sarus-suite` behavior for consumers such as Skybox.
+pub fn config_search_paths(
+    home: Option<&Path>,
+    xdg_config_home: Option<&Path>,
+    xdg_config_dirs: Option<&OsStr>,
+) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    // A set but empty or relative value is invalid and must not silently
+    // become the HOME-based location.
+    let user_config_home = match xdg_config_home {
+        Some(path) if path.is_absolute() => Some(path.to_path_buf()),
+        Some(_) => None,
+        None => home.map(|path| path.join(".config")),
+    };
+
+    if let Some(path) = user_config_home {
+        paths.push(path.join(CONFIG_DIR_NAME));
+    }
+
+    let system_dirs = xdg_config_dirs
+        .map(std::env::split_paths)
+        .into_iter()
+        .flatten()
+        .filter(|path| path.is_absolute())
+        .collect::<Vec<_>>();
+
+    paths.extend(
+        system_dirs
+            .into_iter()
+            .map(|path| path.join(CONFIG_DIR_NAME)),
+    );
+
+    let default_system_dir = PathBuf::from(XDG_CONFIG_DIR).join(CONFIG_DIR_NAME);
+    if !paths.contains(&default_system_dir) {
+        paths.push(default_system_dir);
+    }
+
+    // Preserve installations made before XDG support was introduced.
+    paths.push(PathBuf::from(CONFIG_PATH));
+    paths
+}
+
+/// Load configuration using the XDG search order.
+pub fn load_config_xdg(
+    force_expand: VarExpand,
+    env_option: &Option<HashMap<String, String>>,
+) -> SarusResult<Config> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let xdg_config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let xdg_config_dirs = std::env::var_os("XDG_CONFIG_DIRS");
+
+    let paths = config_search_paths(
+        home.as_deref(),
+        xdg_config_home.as_deref(),
+        xdg_config_dirs.as_deref(),
+    );
+    let config_dir = resolve_config_dir_from_paths(&paths).map_err(|error| SarusError {
+        code: 23,
+        file_path: None,
+        msg: error.to_string(),
+    })?;
+
+    load_config_path(Some(config_dir), force_expand, env_option)
+}
+
+/// Resolve the first existing directory using the XDG configuration search order.
+pub fn resolve_config_dir() -> Result<PathBuf, ConfigResolutionError> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let xdg_config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let xdg_config_dirs = std::env::var_os("XDG_CONFIG_DIRS");
+    let paths = config_search_paths(
+        home.as_deref(),
+        xdg_config_home.as_deref(),
+        xdg_config_dirs.as_deref(),
+    );
+
+    resolve_config_dir_from_paths(&paths)
+}
+
+fn resolve_config_dir_from_paths(paths: &[PathBuf]) -> Result<PathBuf, ConfigResolutionError> {
+    for path in paths {
+        match std::fs::metadata(path) {
+            Ok(metadata) if metadata.is_dir() => return Ok(path.clone()),
+            Ok(_) => {
+                return Err(ConfigResolutionError {
+                    reason: format!(
+                        "Configuration path {} exists but is not a directory",
+                        path.display()
+                    ),
+                });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(ConfigResolutionError {
+                    reason: format!(
+                        "Cannot access configuration directory {}: {error}",
+                        path.display()
+                    ),
+                });
+            }
+        }
+    }
+
+    Err(ConfigResolutionError {
+        reason: format!(
+            "Cannot find config files in {}",
+            paths
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(" or ")
+        ),
+    })
+}
+
 pub fn load_config_path(
     config_option: Option<PathBuf>,
     force_expand: VarExpand,
@@ -483,12 +621,15 @@ fn load_raw_config_from_dir(
     Ok(rcfg)
 }
 
+#[instrument(level = "debug")]
 pub fn update_config_by_user(config: &mut Config, edf: EDF) -> SarusResult<()> {
-    let parallax_imagestore_create = edf.annotations.get("com.sarus.hooks.parallax_imagestore_create");
+    let parallax_imagestore_create = edf
+        .annotations
+        .get("com.sarus.hooks.parallax_imagestore_create");
     if parallax_imagestore_create.is_some() {
         match parallax_imagestore_create.unwrap().as_str() {
-            "false" => { config.hooks.parallax_imagestore_create = String::from("") },
-            _ => {},
+            "false" => config.hooks.parallax_imagestore_create = String::from(""),
+            _ => {}
         }
     }
 
@@ -497,9 +638,12 @@ pub fn update_config_by_user(config: &mut Config, edf: EDF) -> SarusResult<()> {
         config.parallax_imagestore = parallax_imagestore.unwrap().to_string();
     }
 
-    let parallax_imagestore_keepalive = edf.annotations.get("com.sarus.parallax_imagestore_keepalive");
+    let parallax_imagestore_keepalive = edf
+        .annotations
+        .get("com.sarus.parallax_imagestore_keepalive");
     if parallax_imagestore_keepalive.is_some() {
-        config.parallax_imagestore_keepalive = match parallax_imagestore_keepalive.unwrap().as_str() {
+        config.parallax_imagestore_keepalive = match parallax_imagestore_keepalive.unwrap().as_str()
+        {
             "true" => true,
             "false" => false,
             _ => config.parallax_imagestore_keepalive,
@@ -596,6 +740,7 @@ mod tests {
     use super::*;
     use crate::tests::get_rendered_edf;
     use serial_test::serial;
+    use std::ffi::OsStr;
 
     fn get_rendered_config(cfg_dir: &str) -> SarusResult<Config> {
         let cwd = std::env::current_dir()
@@ -632,6 +777,80 @@ mod tests {
     fn load_config_unquoted() {
         let result = get_rendered_config("config.unquoted");
         assert!(result.is_err())
+    }
+
+    #[test]
+    fn config_search_paths_prefers_user_home_and_xdg_directories() {
+        let paths = config_search_paths(
+            Some(Path::new("/home/tester")),
+            Some(Path::new("/tmp/tester-config")),
+            Some(OsStr::new("/etc/site-a:/etc/site-b")),
+        );
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/tmp/tester-config/sarus-suite"),
+                PathBuf::from("/etc/site-a/sarus-suite"),
+                PathBuf::from("/etc/site-b/sarus-suite"),
+                PathBuf::from("/etc/xdg/sarus-suite"),
+                PathBuf::from("/etc/sarus-suite"),
+            ]
+        );
+    }
+
+    #[test]
+    fn config_search_paths_use_defaults_when_variables_are_unset() {
+        let paths = config_search_paths(Some(Path::new("/home/tester")), None, None);
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/home/tester/.config/sarus-suite"),
+                PathBuf::from("/etc/xdg/sarus-suite"),
+                PathBuf::from("/etc/sarus-suite"),
+            ]
+        );
+    }
+
+    #[test]
+    fn config_search_paths_skip_user_location_without_home() {
+        let paths = config_search_paths(None, None, None);
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/etc/xdg/sarus-suite"),
+                PathBuf::from("/etc/sarus-suite"),
+            ]
+        );
+    }
+
+    #[test]
+    fn config_search_paths_skip_invalid_config_home_and_dirs() {
+        let paths = config_search_paths(
+            Some(Path::new("/home/tester")),
+            Some(Path::new("relative-config")),
+            Some(OsStr::new("")),
+        );
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/etc/xdg/sarus-suite"),
+                PathBuf::from("/etc/sarus-suite"),
+            ]
+        );
+    }
+
+    #[test]
+    fn load_config_xdg_from_paths_loads_first_existing_directory() {
+        let config_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test/config");
+        let paths = vec![PathBuf::from("missing"), config_dir];
+        let config_dir = resolve_config_dir_from_paths(&paths).unwrap();
+        let config = load_config_path(Some(config_dir), VarExpand::Must, &None).unwrap();
+
+        assert_eq!(config.parallax_path, "parallax50");
     }
 
     #[test]
